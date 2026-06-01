@@ -2,6 +2,7 @@ import os
 import sys
 import json
 import re
+import time
 from datetime import datetime
 import streamlit as st
 
@@ -143,6 +144,8 @@ class DemoMockLLMProvider(LLMProvider):
 
 if "query" not in st.session_state:
     st.session_state["query"] = "Find the top productivity-friendly flight options from CDG to AUS."
+if "eval_runs" not in st.session_state:
+    st.session_state["eval_runs"] = []
 
 st.markdown('<h1>✈️ <span class="gradient-text">ReAct Flight Agent Assistant</span></h1>', unsafe_allow_html=True)
 st.markdown("---")
@@ -183,8 +186,8 @@ gemini_options = [f"google/{m}" if not m.startswith("google/") else m for m in s
 # Ensure default values are in the lists, or prepend/append them
 if "gpt-4o" not in openai_options:
     openai_options.insert(0, "gpt-4o")
-if "google/gemini-3.1-flash-lite" not in gemini_options:
-    gemini_options.insert(0, "google/gemini-3.1-flash-lite")
+if "deepseek/deepseek-v4-flash" not in gemini_options:
+    gemini_options.insert(0, "deepseek/deepseek-v4-flash")
 if "google/gemini-2.5-flash" not in gemini_options:
     gemini_options.insert(1, "google/gemini-2.5-flash")
 
@@ -209,15 +212,15 @@ else:
 gemini_selection = st.sidebar.selectbox(
     "Gemini / OpenRouter Model",
     options=gemini_options,
-    index=gemini_options.index("google/gemini-3.1-flash-lite") if "google/gemini-3.1-flash-lite" in gemini_options else 0,
-    help="Select a supported Gemini/OpenRouter model from metrics.py (e.g. google/gemini-3.1-flash-lite) or choose Custom Model..."
+    index=gemini_options.index("deepseek/deepseek-v4-flash") if "deepseek/deepseek-v4-flash" in gemini_options else 0,
+    help="Select a supported Gemini/OpenRouter model from metrics.py (e.g. deepseek/deepseek-v4-flash) or choose Custom Model..."
 )
 
 if gemini_selection == "Custom Model...":
     gemini_model_input = st.sidebar.text_input(
         "Custom Gemini/OpenRouter Model Name",
-        value="google/gemini-3.1-flash-lite",
-        help="Specify any valid OpenRouter model name (e.g., google/gemini-3.1-flash-lite)."
+        value="deepseek/deepseek-v4-flash",
+        help="Specify any valid OpenRouter model name (e.g., deepseek/deepseek-v4-flash)."
     )
 else:
     gemini_model_input = gemini_selection
@@ -351,6 +354,16 @@ if st.button("🚀 Run Agentic ReAct Loop", type="primary"):
                 except Exception as e:
                     st.error(f"Failed to initialize live provider: {e}. Falling back to Mock mode automatically.")
                     llm = DemoMockLLMProvider()
+
+            # Show active provider chain pills
+            if hasattr(llm, 'providers') and llm.providers:
+                provider_names = [p.__class__.__name__.replace('Provider', '') for p in llm.providers]
+                model_names = [getattr(p, 'model_name', '?') for p in llm.providers]
+                pills_html = " → ".join(
+                    f'<span style="background:#6366F1;color:white;padding:3px 10px;border-radius:12px;font-size:0.8em;font-weight:600">{name}: {model}</span>'
+                    for name, model in zip(provider_names, model_names)
+                )
+                st.markdown(f'<p style="margin:4px 0">🔗 <b>Active Fallback Chain:</b> {pills_html}</p>', unsafe_allow_html=True)
         else:
             llm = DemoMockLLMProvider()
 
@@ -374,7 +387,9 @@ if st.button("🚀 Run Agentic ReAct Loop", type="primary"):
             old_stdout = sys.stdout
             new_stdout = io.StringIO()
             sys.stdout = new_stdout
-            
+
+            # ── Track wall-clock latency ──
+            run_start = time.time()
             try:
                 final_res = agent.run(user_query)
                 success_run = True
@@ -382,9 +397,50 @@ if st.button("🚀 Run Agentic ReAct Loop", type="primary"):
                 success_run = False
                 final_res = f"Execution failed: {e}"
             finally:
+                run_latency_ms = int((time.time() - run_start) * 1000)
                 captured_out = new_stdout.getvalue()
                 sys.stdout = old_stdout
-                
+
+            # ── Count steps from stdout ──
+            thought_count = captured_out.count("Thought:")
+            action_count  = captured_out.count("Action:")
+
+            # ── Token usage from tracker (last entry) ──
+            last_metrics = tracker.session_metrics[-1] if tracker.session_metrics else {}
+            total_tokens  = last_metrics.get("total_tokens", 0)
+            prompt_tokens = last_metrics.get("prompt_tokens", 0)
+            compl_tokens  = last_metrics.get("completion_tokens", 0)
+            cost_est      = last_metrics.get("cost_estimate", 0.0)
+            model_used    = last_metrics.get("model", gemini_model_input if "Live" in mode else "mock")
+
+            # ── Classify failure type ──
+            if success_run:
+                failure_type = "✅ Success"
+            elif "timeout" in final_res.lower() or "timed out" in final_res.lower():
+                failure_type = "⏱ Timeout"
+            elif "tool" in final_res.lower() and "not found" in final_res.lower():
+                failure_type = "👻 Hallucination"
+            elif "parse" in final_res.lower() or "json" in final_res.lower():
+                failure_type = "⚠️ Parse Error"
+            else:
+                failure_type = "❌ Unknown Error"
+
+            # ── Save run record ──
+            run_record = {
+                "run": len(st.session_state["eval_runs"]) + 1,
+                "query_short": user_query[:45] + "..." if len(user_query) > 45 else user_query,
+                "model": model_used,
+                "latency_ms": run_latency_ms,
+                "steps": thought_count,
+                "actions": action_count,
+                "prompt_tokens": prompt_tokens,
+                "completion_tokens": compl_tokens,
+                "total_tokens": total_tokens,
+                "cost_usd": round(cost_est, 6),
+                "status": failure_type,
+            }
+            st.session_state["eval_runs"].append(run_record)
+
             # Parse captured output blocks for rendering
             # Blocks are delimited by newlines
             lines = captured_out.split("\n")
@@ -394,8 +450,29 @@ if st.button("🚀 Run Agentic ReAct Loop", type="primary"):
                 if not line.strip():
                     continue
                 
-                # Check formatting
-                if line.startswith("Thought:"):
+                # ── Fallback chain events → highlighted banners ──
+                if "[FallbackChain] Attempting" in line:
+                    # Extract provider name e.g. OpenAIProvider, GeminiProvider
+                    provider_part = line.split("provider:")[-1].strip() if "provider:" in line else line
+                    st.markdown(
+                        f'<div style="background:#1e3a5f;border-left:4px solid #38BDF8;padding:10px 14px;'
+                        f'margin:6px 0;border-radius:6px;font-family:monospace">'
+                        f'🔄 <b style="color:#38BDF8">SWITCHING MODEL →</b> '
+                        f'<span style="color:#E2E8F0">{provider_part}</span></div>',
+                        unsafe_allow_html=True
+                    )
+                elif "[FallbackChain]" in line and "failed" in line.lower():
+                    # Extract failed provider
+                    failed_part = line.split("Provider")[-1].split("failed")[0].strip() if "Provider" in line else line
+                    st.markdown(
+                        f'<div style="background:#3b1a1a;border-left:4px solid #F87171;padding:10px 14px;'
+                        f'margin:6px 0;border-radius:6px;font-family:monospace">'
+                        f'⚠️ <b style="color:#F87171">FALLBACK TRIGGERED</b> — '
+                        f'<span style="color:#FCA5A5">{failed_part}</span> failed, trying next provider...</div>',
+                        unsafe_allow_html=True
+                    )
+                # ── Standard ReAct blocks ──
+                elif line.startswith("Thought:"):
                     st.markdown(f'<div class="thought-block">🧠 <b>{line}</b></div>', unsafe_allow_html=True)
                 elif line.startswith("Action:"):
                     st.markdown(f'<div class="action-block">⚙️ <b>{line}</b></div>', unsafe_allow_html=True)
@@ -413,3 +490,87 @@ if st.button("🚀 Run Agentic ReAct Loop", type="primary"):
                 st.error("Reasoning loop execution failed!")
                 st.markdown("### ❌ Error Message")
                 st.error(final_res)
+
+# ═══════════════════════════════════════════════════════════
+# 📊  EVALUATION METRICS DASHBOARD
+# ═══════════════════════════════════════════════════════════
+if st.session_state["eval_runs"]:
+    st.markdown("---")
+    st.markdown('<h2>📊 <span class="gradient-text">Evaluation Metrics Dashboard</span></h2>', unsafe_allow_html=True)
+    st.caption("Tracks token efficiency, latency, loop count, and failure analysis across all runs in this session.")
+
+    runs = st.session_state["eval_runs"]
+    n = len(runs)
+    avg_latency = sum(r["latency_ms"] for r in runs) / n
+    avg_tokens  = sum(r["total_tokens"] for r in runs) / n
+    success_pct = sum(1 for r in runs if "Success" in r["status"]) / n * 100
+    total_cost  = sum(r["cost_usd"] for r in runs)
+
+    # ── KPI Tiles ──
+    k1, k2, k3, k4 = st.columns(4)
+    k1.metric("🔁 Total Runs", n)
+    k2.metric("⏱ Avg Latency", f"{avg_latency/1000:.2f}s",
+              delta=f"{(runs[-1]['latency_ms'] - avg_latency)/1000:+.2f}s" if n > 1 else None)
+    k3.metric("🪙 Avg Tokens", f"{avg_tokens:.0f}",
+              delta=f"{runs[-1]['total_tokens'] - avg_tokens:+.0f}" if n > 1 else None)
+    k4.metric("✅ Success Rate", f"{success_pct:.0f}%")
+
+    st.markdown(f"""
+    <div style='background:rgba(16,185,129,0.08);border:1px solid #10B981;border-radius:8px;
+    padding:10px 16px;margin:8px 0;font-size:0.9em'>
+    💰 <b>Estimated Total Session Cost:</b> <span style='color:#34D399'>${total_cost:.6f} USD</span>
+    &nbsp;|&nbsp; 📦 <b>Total Tokens Used:</b> {sum(r['total_tokens'] for r in runs):,}
+    </div>""", unsafe_allow_html=True)
+
+    # ── Clear button ──
+    if st.button("🗑 Clear Evaluation History", key="clear_eval"):
+        st.session_state["eval_runs"] = []
+        st.rerun()
+
+    # ── Per-Run Table ──
+    st.markdown("#### 📋 Per-Run Metrics")
+    import pandas as pd
+    df = pd.DataFrame(runs)[["run","model","latency_ms","steps","actions",
+                               "prompt_tokens","completion_tokens","total_tokens","cost_usd","status","query_short"]]
+    df.columns = ["Run","Model","Latency (ms)","Steps","Actions",
+                  "Prompt Tokens","Completion Tokens","Total Tokens","Cost (USD)","Status","Query"]
+    st.dataframe(df, use_container_width=True, hide_index=True)
+
+    # ── Charts ──
+    if n >= 1:
+        chart_c1, chart_c2 = st.columns(2)
+
+        with chart_c1:
+            st.markdown("#### ⏱ Latency per Run (ms)")
+            latency_df = pd.DataFrame({"Run": [f"#{r['run']}" for r in runs],
+                                        "Latency (ms)": [r["latency_ms"] for r in runs]})
+            st.bar_chart(latency_df.set_index("Run"), color="#6366F1", use_container_width=True)
+
+        with chart_c2:
+            st.markdown("#### 🪙 Token Usage per Run")
+            token_df = pd.DataFrame({
+                "Run": [f"#{r['run']}" for r in runs],
+                "Prompt": [r["prompt_tokens"] for r in runs],
+                "Completion": [r["completion_tokens"] for r in runs],
+            })
+            st.bar_chart(token_df.set_index("Run"), use_container_width=True)
+
+        step_df = pd.DataFrame({"Run": [f"#{r['run']}" for r in runs],
+                                 "Steps (Thought→Action)": [r["steps"] for r in runs]})
+        st.markdown("#### 🔄 Loop Count (ReAct Steps) per Run")
+        st.bar_chart(step_df.set_index("Run"), color="#A855F7", use_container_width=True)
+
+    # ── Failure Analysis ──
+    st.markdown("#### 🔍 Failure Analysis")
+    from collections import Counter
+    status_counts = Counter(r["status"] for r in runs)
+    fa_cols = st.columns(len(status_counts) or 1)
+    for col, (status, count) in zip(fa_cols, status_counts.items()):
+        color = "#10B981" if "Success" in status else "#F87171" if "Error" in status or "Timeout" in status else "#FBBF24"
+        col.markdown(
+            f'<div style="background:rgba(30,41,59,0.6);border:1px solid {color};border-radius:10px;'
+            f'padding:14px;text-align:center">'
+            f'<div style="font-size:1.8em;font-weight:800;color:{color}">{count}</div>'
+            f'<div style="font-size:0.85em;color:#94A3B8">{status}</div></div>',
+            unsafe_allow_html=True
+        )
