@@ -604,10 +604,10 @@ if __name__ == "__main__":
     else:
         print(f"Loaded {len(parsed_prod)} comfort flights.")
         print(f"Top comfort flight score: {parsed_prod[0]['productivity_score']} (Price: ${parsed_prod[0]['price_usd']})")
-        
+
     print("\n--- 2. Testing Time Until Flight ---")
     print(time_until_flight("BA 303", "2026-03-03 08:30"))
-    
+
     print("\n--- 3. Testing Flight Details Parsing ---")
     details = parse_flight_details("BA 191")
     parsed_details = json.loads(details)
