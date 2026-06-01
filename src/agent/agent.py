@@ -1,6 +1,8 @@
 import os
 import re
 import json
+import csv
+import importlib
 from typing import List, Dict, Any, Optional
 from src.core.llm_provider import LLMProvider
 from src.telemetry.logger import logger
@@ -19,28 +21,57 @@ class ReActAgent:
 
     def get_system_prompt(self) -> str:
         """
-        System prompt instructing the agent to follow ReAct logic.
+        System prompt for the Flight Search and Hold ReAct Agent.
         """
         tool_descriptions = "\n".join([f"- {t['name']}: {t['description']}" for t in self.tools])
-        return f"""You are an intelligent travel assistant. You must answer the user request by calling the appropriate tools.
-You have access to the following tools:
+        return f"""You are a Flight Search and Hold ReAct Agent.
+
+Your job is to help users search for flights and temporarily hold a selected flight
+only when the user clearly asks for a hold or reservation.
+
+A temporary hold is not a paid booking. Do not process payments, collect credit card
+data, collect passport data, or claim that a ticket is confirmed.
+
+Available tools:
 {tool_descriptions}
 
-Use the following exact format:
-Thought: your line of reasoning about what you need to do next.
-Action: tool_name(arguments)
-Observation: the result returned by the tool.
+Rules:
+- Use only the listed tools.
+- Never invent flight data, prices, flight numbers, booking tokens, or hold codes.
+- Never write Observation yourself. Observation is returned by the environment.
+- If origin, destination, or outbound date is missing, ask a clarification question.
+- Always call search_flights before hold_flight.
+- Only call hold_flight if the user clearly asks to hold or reserve a flight.
+- If the user only asks to find or compare flights, do not call hold_flight.
+- If search_flights returns no results, do not call hold_flight.
+- If there are multiple flight options, choose the best option according to the user's request.
+- If the user gives no preference, choose the cheapest available option.
+- If hold_flight fails with price_changed, sold_out, booking_token_expired, or missing_booking_reference, explain the issue and suggest the safest next step.
 
-... (repeat Thought, Action, Observation as many times as needed to resolve the request)
+Use this exact format:
+Thought: brief reasoning about what to do next
+Action: tool_name(argument_name="value", another_argument="value")
 
-Thought: I have solved the request.
-Final Answer: your final response to the user.
+After writing an Action, stop immediately and wait for Observation.
 
-Ensure that:
-1. Every time you want to execute a tool, write "Action: tool_name(arguments)" followed by a newline and nothing else.
-2. Every time you write an "Action", you must STOP and wait for the "Observation:".
-3. Write "Final Answer:" when you are finished and have the final resolution.
-"""
+When finished, use:
+Final Answer: clear response to the user
+
+Example:
+User: Find the cheapest flight from CDG to AUS on 2026-03-03 and hold it for 15 minutes.
+
+Thought: I need to search flights first because holding requires a valid booking token.
+Action: search_flights(departure_airport="CDG", arrival_airport="AUS", departure_date="2026-03-03", currency="USD")
+
+Observation: Found 2 options. Option 1: price 520 USD, booking_token token_1. Option 2: price 525 USD, booking_token token_2.
+
+Thought: The user wants the cheapest flight. Option 1 is the cheapest and has a booking token, so I can hold it.
+Action: hold_flight(booking_token="token_1", passenger_count="1", hold_minutes="15")
+
+Observation: Hold created. Hold code HOLD-BA191-001. Expires in 15 minutes.
+
+Final Answer: I found and temporarily held the cheapest flight from CDG to AUS. Hold code: HOLD-BA191-001. This hold expires in 15 minutes and is not a paid booking.
+""".strip()
 
     def run(self, user_input: str) -> str:
         """
@@ -56,7 +87,6 @@ Ensure that:
             response = self.llm.generate(
                 prompt=conversation_context,
                 system_prompt=self.get_system_prompt(),
-                stop=["Observation:", "Observation: "]
             )
             
             content = response.get("content", "").strip()
@@ -100,64 +130,85 @@ Ensure that:
         """
         Helper method to execute tools dynamically. Parses various argument string formats.
         """
-        from src.tools import flight_tools
-
-        tool_mapping = {
-            "find_productivity_flights": flight_tools.find_productivity_flights,
-            "time_until_flight": flight_tools.time_until_flight,
-            "parse_flight_details": flight_tools.parse_flight_details,
-            "get_current_time": flight_tools.get_current_time
-        }
-        
-        if tool_name not in tool_mapping:
-            # Check standard fallback from skeleton
-            for tool in self.tools:
-                if tool['name'] == tool_name:
-                    return f"Result of {tool_name}"
+        func = self._resolve_tool(tool_name)
+        if not func:
+            logger.log_event("UNKNOWN_TOOL", {"tool": tool_name})
             return f"Tool {tool_name} not found."
-            
-        func = tool_mapping[tool_name]
         
         try:
-            cleaned_args = args_str.strip()
-            # 1. Parse JSON argument block
-            if cleaned_args.startswith("{") and cleaned_args.endswith("}"):
-                args = json.loads(cleaned_args)
-                if isinstance(args, dict):
-                    return func(**args)
-                    
-            # 2. Parse standard parentheses function args (e.g. ("BA 303", "2026-03-03 08:30"))
-            if cleaned_args.startswith("(") and cleaned_args.endswith(")"):
-                cleaned_args = cleaned_args[1:-1]
-                
-            if not cleaned_args:
-                return func()
-                
-            # Split by comma but respect quotes
-            import csv
-            reader = csv.reader([cleaned_args], skipinitialspace=True)
-            args = next(reader)
-            
-            # Clean named argument mapping if LLM generated them like: flight_number="BA 191"
-            # Or current_time_str='2026-03-03 08:30'
-            kwargs = {}
-            positional_args = []
-            for arg in args:
-                arg_cleaned = arg.strip()
-                if "=" in arg_cleaned:
-                    parts = arg_cleaned.split("=", 1)
-                    key = parts[0].strip()
-                    val = parts[1].strip().strip('\'"')
-                    kwargs[key] = val
-                else:
-                    positional_args.append(arg_cleaned.strip('\'"'))
-            
+            kwargs, positional_args = self._parse_tool_args(args_str)
             if kwargs:
-                return func(*positional_args, **kwargs)
+                result = func(*positional_args, **kwargs)
             elif positional_args:
-                return func(*positional_args)
+                result = func(*positional_args)
             else:
-                return func()
+                result = func()
+            return result if isinstance(result, str) else json.dumps(result, ensure_ascii=False)
         except Exception as e:
+            logger.log_event("TOOL_ERROR", {"tool": tool_name, "args": args_str, "error": str(e)})
             return f"Error executing tool '{tool_name}' with args '{args_str}': {e}"
+
+    def _resolve_tool(self, tool_name: str):
+        """Resolve tools from injected tool definitions or known tool modules."""
+        for tool in self.tools:
+            if tool.get("name") == tool_name and callable(tool.get("function")):
+                return tool["function"]
+
+        for module_name in (
+            "src.tools.flight_tools",
+            "src.tools.hold_tools",
+            "src.tools.invoice_tools",
+            "src.tools.user_info_tools",
+        ):
+            try:
+                module = importlib.import_module(module_name)
+            except ImportError:
+                continue
+            func = getattr(module, tool_name, None)
+            if callable(func):
+                return func
+        return None
+
+    def _parse_tool_args(self, args_str: str):
+        """Parse JSON args or function-call style key=value arguments."""
+        cleaned_args = args_str.strip()
+        if cleaned_args.startswith("{") and cleaned_args.endswith("}"):
+            args = json.loads(cleaned_args)
+            if isinstance(args, dict):
+                return args, []
+            if isinstance(args, list):
+                return {}, args
+
+        if cleaned_args.startswith("(") and cleaned_args.endswith(")"):
+            cleaned_args = cleaned_args[1:-1]
+        if not cleaned_args:
+            return {}, []
+
+        reader = csv.reader([cleaned_args], skipinitialspace=True)
+        args = next(reader)
+
+        kwargs = {}
+        positional_args = []
+        for arg in args:
+            arg_cleaned = arg.strip()
+            if "=" in arg_cleaned:
+                key, value = arg_cleaned.split("=", 1)
+                kwargs[key.strip()] = self._coerce_arg_value(value.strip().strip('\'"'))
+            else:
+                positional_args.append(self._coerce_arg_value(arg_cleaned.strip('\'"')))
+        return kwargs, positional_args
+
+    def _coerce_arg_value(self, value: str):
+        lowered = value.lower()
+        if lowered in {"none", "null"}:
+            return None
+        if lowered == "true":
+            return True
+        if lowered == "false":
+            return False
+        if re.fullmatch(r"-?\d+", value):
+            return int(value)
+        if re.fullmatch(r"-?\d+\.\d+", value):
+            return float(value)
+        return value
 
