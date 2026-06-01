@@ -238,8 +238,12 @@ class DemoMockLLMProvider(LLMProvider):
 
 # ----------------- STREAMLIT INTERFACE -----------------
 
-if "query" not in st.session_state:
-    st.session_state["query"] = "Compare flights from CDG to AUS on 2026-03-03 sorted by recommended score."
+if "messages" not in st.session_state:
+    st.session_state["messages"] = [
+        {"role": "assistant", "content": "Hello! I am your Flight Agent Assistant. How can I help you search, compare, or hold flights today?"}
+    ]
+if "pending_query" not in st.session_state:
+    st.session_state["pending_query"] = None
 if "eval_runs" not in st.session_state:
     st.session_state["eval_runs"] = []
 
@@ -393,7 +397,7 @@ with col1:
     st.caption("Nguyễn Khánh Toàn")
     st.write("Searches routes and returns a sortable, weighted RCM scoring comparison table.")
     if st.button("Compare Flights Prompt", key="compare_use"):
-        st.session_state["query"] = "Compare flights from CDG to AUS on 2026-03-03 sorted by recommended score."
+        st.session_state["pending_query"] = "Compare flights from CDG to AUS on 2026-03-03 sorted by recommended score."
         st.rerun()
 
 with col2:
@@ -401,7 +405,7 @@ with col2:
     st.caption("Nguyễn Khánh Toàn")
     st.write("Enforces declarative Pydantic v2 email, phone, and date constraints on passenger info.")
     if st.button("Validate Info Prompt", key="validate_use"):
-        st.session_state["query"] = "Validate passenger personal info for Nguyen Van A (email: vana@email.com, phone: 0901234567, DOB: 1995-10-15)."
+        st.session_state["pending_query"] = "Validate passenger personal info for Nguyen Van A (email: vana@email.com, phone: 0901234567, DOB: 1995-10-15)."
         st.rerun()
 
 with col3:
@@ -409,7 +413,7 @@ with col3:
     st.caption("Phạm Thị Linh Chi")
     st.write("Searches flight routes, selects the cheapest option, and creates a simulated hold reservation.")
     if st.button("Simulate Hold Prompt", key="hold_use"):
-        st.session_state["query"] = "Search flights from CDG to AUS on 2026-03-03, choose the cheapest option, and place a 15-minute temporary hold on it."
+        st.session_state["pending_query"] = "Search flights from CDG to AUS on 2026-03-03, choose the cheapest option, and place a 15-minute temporary hold on it."
         st.rerun()
 
 with col4:
@@ -417,7 +421,7 @@ with col4:
     st.caption("Đinh Nhật Thành / Lưu Thiện Việt Cường")
     st.write("Generates custom booking confirmations, calculates total price + fee, and exports formal PDF files.")
     if st.button("Generate Invoice Prompt", key="invoice_use"):
-        st.session_state["query"] = "Generate a receipt invoice for Nguyen Van A (email: vana@email.com, phone: 0901234567) on British Airways flight CDG to AUS departing 2026-03-03 12:10 with duration 13h 40m at price 520.0."
+        st.session_state["pending_query"] = "Generate a receipt invoice for Nguyen Van A (email: vana@email.com, phone: 0901234567) on British Airways flight CDG to AUS departing 2026-03-03 12:10 with duration 13h 40m at price 520.0."
         st.rerun()
 
 with col5:
@@ -425,20 +429,18 @@ with col5:
     st.caption("Multi-Tool Pipeline (All Teammates)")
     st.write("Compares flights, validates passenger details, creates a safe hold, and outputs an invoice & PDF receipt.")
     if st.button("Load Combined Flow", key="combined_use"):
-        st.session_state["query"] = (
+        st.session_state["pending_query"] = (
             "Compare flights from CDG to AUS on 2026-03-03. Find the best recommended one. "
             "Then, collect passenger info for Nguyen Van A (email: vana@email.com, phone: 0901234567), "
             "place a 15-minute hold on it, and generate an invoice with PDF confirmation."
         )
         st.rerun()
 
-# Query Input Field
-st.markdown("### 🔍 Query Runner")
-user_query = st.text_area(
-    "Query input:",
-    key="query",
-    height=80
-)
+# Chat History Container
+st.markdown("### 💬 Flight Agent Assistant Chat")
+for message in st.session_state["messages"]:
+    with st.chat_message(message["role"]):
+        st.markdown(message["content"])
 
 # Expose tools descriptions
 tools_metadata = [
@@ -458,14 +460,29 @@ tools_metadata = [
     {"name": "generate_invoice_pdf", "description": "Generates a formal PDF invoice file on disk from invoice_result. Usage: generate_invoice_pdf(invoice_result, output_path)"}
 ]
 
-# Run agent
-if st.button("🚀 Run Agentic ReAct Loop", type="primary"):
-    if not user_query.strip():
-        st.error("Please enter a valid query prompt first.")
-    else:
-        # 1. Initialize Provider
+# Check for pending query from traveler use cases, or render standard chat input bar
+user_query = None
+if st.session_state["pending_query"]:
+    user_query = st.session_state["pending_query"]
+    st.session_state["pending_query"] = None
+else:
+    user_query = st.chat_input("Ask the Flight Agent anything...")
+
+if user_query:
+    # 1. Append User Message
+    st.session_state["messages"].append({"role": "user", "content": user_query})
+    
+    # 2. Rerun to show user message immediately in chat
+    st.rerun()
+
+# If the last message is from the user, the assistant must reply
+if st.session_state["messages"][-1]["role"] == "user":
+    user_query_to_run = st.session_state["messages"][-1]["content"]
+    
+    with st.chat_message("assistant"):
+        # A. Initialize Provider
         if "Live Fallback" in mode:
-            with st.spinner("Initializing Fallback LLM Provider (OpenAI -> Gemini -> Local)..."):
+            with st.spinner("Initializing Fallback LLM Provider..."):
                 try:
                     llm = get_fallback_provider(
                         openai_model=openai_model_input,
@@ -474,44 +491,23 @@ if st.button("🚀 Run Agentic ReAct Loop", type="primary"):
                 except Exception as e:
                     st.error(f"Failed to initialize live provider: {e}. Falling back to Mock mode automatically.")
                     llm = DemoMockLLMProvider()
-
-            # Show active provider chain pills
-            if hasattr(llm, 'providers') and llm.providers:
-                provider_names = [p.__class__.__name__.replace('Provider', '') for p in llm.providers]
-                model_names = [getattr(p, 'model_name', '?') for p in llm.providers]
-                pills_html = " → ".join(
-                    f'<span style="background:#6366F1;color:white;padding:3px 10px;border-radius:12px;font-size:0.8em;font-weight:600">{name}: {model}</span>'
-                    for name, model in zip(provider_names, model_names)
-                )
-                st.markdown(f'<p style="margin:4px 0">🔗 <b>Active Fallback Chain:</b> {pills_html}</p>', unsafe_allow_html=True)
         else:
             llm = DemoMockLLMProvider()
 
-        # 2. Build Agent
+        # B. Build Agent
         agent = ReActAgent(llm=llm, tools=tools_metadata, max_steps=max_steps_slider)
-        # Override the agent's system prompt dynamically with the value from the sidebar!
         agent.get_system_prompt = lambda: system_prompt_input
-        
-        st.markdown("### 🤖 Reasoning Execution Logs")
-        
-        # Override printing inside Streamlit
-        # We hook into streamlit columns or containers to print logs live
-        thinking_container = st.container()
-        
-        # Simple ReAct Loop Execution with visual streams
-        logger_events = []
-        
-        with st.spinner("Agent thinking..."):
-            # Intercept print outputs
+
+        # C. Capture reasoning steps live in a standard Streamlit Status box
+        with st.status("🕵️ Flight Agent reasoning in progress...", expanded=True) as status_box:
             import io
             old_stdout = sys.stdout
             new_stdout = io.StringIO()
             sys.stdout = new_stdout
 
-            # ── Track wall-clock latency ──
             run_start = time.time()
             try:
-                final_res = agent.run(user_query)
+                final_res = agent.run(user_query_to_run)
                 success_run = True
             except Exception as e:
                 success_run = False
@@ -521,77 +517,20 @@ if st.button("🚀 Run Agentic ReAct Loop", type="primary"):
                 captured_out = new_stdout.getvalue()
                 sys.stdout = old_stdout
 
-            # ── Count steps from stdout ──
-            thought_count = captured_out.count("Thought:")
-            action_count  = captured_out.count("Action:")
-
-            # ── Token usage from tracker (last entry) ──
-            last_metrics = tracker.session_metrics[-1] if tracker.session_metrics else {}
-            total_tokens  = last_metrics.get("total_tokens", 0)
-            prompt_tokens = last_metrics.get("prompt_tokens", 0)
-            compl_tokens  = last_metrics.get("completion_tokens", 0)
-            cost_est      = last_metrics.get("cost_estimate", 0.0)
-            model_used    = last_metrics.get("model", gemini_model_input if "Live" in mode else "mock")
-
-            # ── Classify failure type ──
-            if success_run:
-                failure_type = "✅ Success"
-            elif "timeout" in final_res.lower() or "timed out" in final_res.lower():
-                failure_type = "⏱ Timeout"
-            elif "tool" in final_res.lower() and "not found" in final_res.lower():
-                failure_type = "👻 Hallucination"
-            elif "parse" in final_res.lower() or "json" in final_res.lower():
-                failure_type = "⚠️ Parse Error"
-            else:
-                failure_type = "❌ Unknown Error"
-
-            # ── Save run record ──
-            run_record = {
-                "run": len(st.session_state["eval_runs"]) + 1,
-                "query_short": user_query[:45] + "..." if len(user_query) > 45 else user_query,
-                "model": model_used,
-                "latency_ms": run_latency_ms,
-                "steps": thought_count,
-                "actions": action_count,
-                "prompt_tokens": prompt_tokens,
-                "completion_tokens": compl_tokens,
-                "total_tokens": total_tokens,
-                "cost_usd": round(cost_est, 6),
-                "status": failure_type,
-            }
-            st.session_state["eval_runs"].append(run_record)
-
             # Parse captured output blocks for rendering
-            # Blocks are delimited by newlines
             lines = captured_out.split("\n")
-            current_thought = []
-            
             for line in lines:
                 if not line.strip():
                     continue
                 
-                # ── Fallback chain events → highlighted banners ──
+                # switching provider logs
                 if "[FallbackChain] Attempting" in line:
-                    # Extract provider name e.g. OpenAIProvider, GeminiProvider
                     provider_part = line.split("provider:")[-1].strip() if "provider:" in line else line
-                    st.markdown(
-                        f'<div style="background:#1e3a5f;border-left:4px solid #38BDF8;padding:10px 14px;'
-                        f'margin:6px 0;border-radius:6px;font-family:monospace">'
-                        f'🔄 <b style="color:#38BDF8">SWITCHING MODEL →</b> '
-                        f'<span style="color:#E2E8F0">{provider_part}</span></div>',
-                        unsafe_allow_html=True
-                    )
+                    st.markdown(f"🔄 **SWITCHING MODEL →** `{provider_part}`")
                 elif "[FallbackChain]" in line and "failed" in line.lower():
-                    # Extract failed provider
                     failed_part = line.split("Provider")[-1].split("failed")[0].strip() if "Provider" in line else line
-                    st.markdown(
-                        f'<div style="background:#3b1a1a;border-left:4px solid #F87171;padding:10px 14px;'
-                        f'margin:6px 0;border-radius:6px;font-family:monospace">'
-                        f'⚠️ <b style="color:#F87171">FALLBACK TRIGGERED</b> — '
-                        f'<span style="color:#FCA5A5">{failed_part}</span> failed, trying next provider...</div>',
-                        unsafe_allow_html=True
-                    )
-                # ── Standard ReAct blocks ──
+                    st.markdown(f"⚠️ **FALLBACK TRIGGERED** — `{failed_part}` failed, trying next...")
+                # ReAct step logs
                 elif line.startswith("Thought:"):
                     st.markdown(f'<div class="thought-block">🧠 <b>{line}</b></div>', unsafe_allow_html=True)
                 elif line.startswith("Action:"):
@@ -599,17 +538,51 @@ if st.button("🚀 Run Agentic ReAct Loop", type="primary"):
                 elif line.startswith("Observation:"):
                     st.markdown(f'<div class="observation-block">👁️ <b>{line}</b></div>', unsafe_allow_html=True)
                 else:
-                    # Clean stdout lines
                     st.write(line)
-                    
+
             if success_run:
-                st.success("Reasoning loop successfully completed!")
-                st.markdown("### 🏆 Final Agent Answer")
-                st.info(final_res)
+                status_box.update(label="✅ Reasoning successfully completed!", state="complete")
             else:
-                st.error("Reasoning loop execution failed!")
-                st.markdown("### ❌ Error Message")
-                st.error(final_res)
+                status_box.update(label="❌ Reasoning loop execution failed!", state="error")
+
+        # Save record for evaluation
+        thought_count = captured_out.count("Thought:")
+        action_count  = captured_out.count("Action:")
+        last_metrics = tracker.session_metrics[-1] if tracker.session_metrics else {}
+        total_tokens  = last_metrics.get("total_tokens", 0)
+        prompt_tokens = last_metrics.get("prompt_tokens", 0)
+        compl_tokens  = last_metrics.get("completion_tokens", 0)
+        cost_est      = last_metrics.get("cost_estimate", 0.0)
+        model_used    = last_metrics.get("model", gemini_model_input if "Live" in mode else "mock")
+
+        failure_type = "✅ Success" if success_run else "❌ Error"
+        run_record = {
+            "run": len(st.session_state["eval_runs"]) + 1,
+            "query_short": user_query_to_run[:45] + "..." if len(user_query_to_run) > 45 else user_query_to_run,
+            "model": model_used,
+            "latency_ms": run_latency_ms,
+            "steps": thought_count,
+            "actions": action_count,
+            "prompt_tokens": prompt_tokens,
+            "completion_tokens": compl_tokens,
+            "total_tokens": total_tokens,
+            "cost_usd": round(cost_est, 6),
+            "status": failure_type,
+        }
+        st.session_state["eval_runs"].append(run_record)
+
+        # Output final result
+        if success_run:
+            st.success("Success!")
+            st.markdown("### 🏆 Final Agent Answer")
+            st.info(final_res)
+            st.session_state["messages"].append({"role": "assistant", "content": final_res})
+        else:
+            st.error("Execution failed!")
+            st.error(final_res)
+            st.session_state["messages"].append({"role": "assistant", "content": f"⚠️ Error: {final_res}"})
+
+        st.rerun()
 
 # ═══════════════════════════════════════════════════════════
 # 📊  EVALUATION METRICS DASHBOARD
