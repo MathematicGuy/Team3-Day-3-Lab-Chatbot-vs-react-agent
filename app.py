@@ -93,41 +93,137 @@ class DemoMockLLMProvider(LLMProvider):
     def generate(self, prompt: str, system_prompt: str = None, stop: list = None) -> dict:
         self.step_count += 1
         
-        # Scenario 1: Productivity Comfort Finder
-        if "productivity-friendly" in prompt.lower() and "ba 191" not in prompt.lower():
+        # Scenario 1: Flight Comparison & Scoring
+        if "compare" in prompt.lower():
             if self.step_count == 1:
-                content = "Thought: The user is looking for the most comfort and productivity-friendly flight options.\nAction: find_productivity_flights()"
-            else:
-                content = "Thought: I have retrieved the rankings. I will compile the response.\nFinal Answer: Based on amenities, the top-rated flight is Delta segments DL 83 / DL 1491 scoring 250/100, which offers Free Wi-Fi and power outlets at a cost of $1588."
-                
-        # Scenario 2: Time Remaining Countdown
-        elif "time" in prompt.lower() and "productivity-friendly" not in prompt.lower():
-            if self.step_count == 1:
-                content = "Thought: I need to calculate the departure time difference.\nAction: time_until_flight('BA 303', '2026-03-03 08:30')"
-            else:
-                content = "Thought: I have calculated the delta. I will answer.\nFinal Answer: Flight BA 303 departs in 3 hours and 25 minutes relative to your reference time of 2026-03-03 08:30."
-                
-        # Scenario 3: Details Audit
-        elif "itinerary details" in prompt.lower() and "productivity-friendly" not in prompt.lower():
-            if self.step_count == 1:
-                content = "Thought: I will extract segment specifics.\nAction: parse_flight_details('BA 191')"
-            else:
-                content = "Thought: Details retrieved successfully.\nFinal Answer: Flight BA 191 is a 2-segment British Airways itinerary: CDG -> LHR on BA 301, and LHR -> AUS on BA 191 (using a premium Airbus A350 with USB/power charging)."
-                
-        # Scenario 4: Comprehensive Multi-Step
-        else:
-            if self.step_count == 1:
-                content = "Thought: Complex query requested. First I will find the top productivity flights.\nAction: find_productivity_flights()"
-            elif self.step_count == 2:
-                content = "Thought: Comfort flight options resolved. Next, I will parse the segment itinerary details for flight 'BA 191'.\nAction: parse_flight_details('BA 191')"
-            elif self.step_count == 3:
-                content = "Thought: Routing parsed. Lastly, I will calculate the countdown time delta for BA 303.\nAction: time_until_flight('BA 303', '2026-03-03 08:30')"
+                content = (
+                    "Thought: The user wants to compare flights from CDG to AUS. I will call the compare_flights tool.\n"
+                    "Action: compare_flights(departure_airport=\"CDG\", arrival_airport=\"AUS\", departure_date=\"2026-03-03\", sort_by=\"recommended\")"
+                )
             else:
                 content = (
-                    "Thought: All facts gathered.\nFinal Answer: Comprehensive Travel Summary:\n"
-                    "- **Top Comfort Flight**: Delta (Score: 250/100, Free Wi-Fi, $1588).\n"
-                    "- **BA 191 Itinerary**: 2 legs: CDG -> LHR (BA 301) and LHR -> AUS (BA 191, Airbus A350 with full power outlets).\n"
-                    "- **BA 303 Countdown**: Departs in 3 hours and 25 minutes relative to 2026-03-03 08:30."
+                    "Thought: Flight comparison results have been retrieved in a structured table. I will output the final answer.\n"
+                    "Final Answer: Based on your request, I compared the flights from CDG to AUS on 2026-03-03. The best recommended flight is Option 1 (British Airways, $520.0) which scored highest on comfort metrics (RCM index):\n\n"
+                    "+-----+-----------+----------+----------+----------+-------+-------+\n"
+                    "| Pos | Airline   | Depart   | Arrival  | Duration | Price | RCM   |\n"
+                    "+-----+-----------+----------+----------+----------+-------+-------+\n"
+                    "| 1   | British A | CDG      | AUS      | 13h 40m  | $520  | YES   |\n"
+                    "| 2   | British A | CDG      | AUS      | 10h 10m  | $525  |       |\n"
+                    "+-----+-----------+----------+----------+----------+-------+-------+\n\n"
+                    "The recommended flight features a comfortable 13h 40m duration with in-seat power, USB charging, and above-average legroom on the LHR-AUS segment (BA 191)."
+                )
+                
+        # Scenario 2: Passenger Info Validation
+        elif "validate" in prompt.lower() or "passenger info" in prompt.lower() or "personal info" in prompt.lower():
+            if self.step_count == 1:
+                content = (
+                    "Thought: I need to collect and validate the passenger details using collect_personal_info.\n"
+                    "Action: collect_personal_info(passenger_name=\"Nguyen Van A\", passenger_email=\"vana@email.com\", passenger_phone=\"0901234567\", date_of_birth=\"1995-10-15\")"
+                )
+            else:
+                content = (
+                    "Thought: Validation returned success. I will report the clean validated status to the traveler.\n"
+                    "Final Answer: ✓ The passenger personal information is fully valid under our Pydantic validation checks:\n"
+                    "- **Passenger Name**: Nguyen Van A\n"
+                    "- **Email**: vana@email.com\n"
+                    "- **Phone**: 0901234567\n"
+                    "- **Date of Birth**: 1995-10-15\n\n"
+                    "The model validates all regex-matched phone characters, email domain patterns, and YYYY-MM-DD DOB constraints successfully and is ready for ticketing."
+                )
+                
+        # Scenario 3: Flight Hold
+        elif "hold" in prompt.lower() and "validate" not in prompt.lower() and "invoice" not in prompt.lower():
+            if self.step_count == 1:
+                content = (
+                    "Thought: To hold the cheapest flight, I first need to search flights from CDG to AUS.\n"
+                    "Action: search_flights(departure_airport=\"CDG\", arrival_airport=\"AUS\", departure_date=\"2026-03-03\")"
+                )
+            elif self.step_count == 2:
+                content = (
+                    "Thought: Found 2 options. The cheapest is Option 1 ($520) with token 'sample_token_1'. Now I will put a 15-minute hold on it.\n"
+                    "Action: hold_flight(booking_token=\"sample_token_1\", passenger_count=1, hold_minutes=15, expected_price=520.0)"
+                )
+            else:
+                content = (
+                    "Thought: Hold has been placed. I will report the hold details to the user.\n"
+                    "Final Answer: I searched flights from CDG to AUS, found the cheapest option, and successfully placed a 15-minute temporary hold on it.\n"
+                    "- **Airline**: British Airways\n"
+                    "- **Booking Token**: sample_token_1\n"
+                    "- **Hold Reference Code**: **HOLD-BA191-001**\n"
+                    "- **Status**: Held (Expires in 15 minutes)\n\n"
+                    "*This is a lab-safe simulation and is not a paid booking. No payment details were requested.*"
+                )
+                
+        # Scenario 4: Invoice generation only
+        elif "invoice" in prompt.lower() and "compare" not in prompt.lower():
+            if self.step_count == 1:
+                content = (
+                    "Thought: I will generate the flight invoice receipt for the traveler.\n"
+                    "Action: generate_invoice(passenger_name=\"Nguyen Van A\", passenger_email=\"vana@email.com\", passenger_phone=\"0901234567\", flight_id=\"flight-854624\", airline=\"British Airways\", departure_airport=\"CDG\", arrival_airport=\"AUS\", departure_time=\"2026-03-03 12:10\", arrival_time=\"2026-03-03 16:50\", duration=\"13h 40m\", price_per_person=520.0, passengers=1)"
+                )
+            else:
+                content = (
+                    "Thought: The receipt is generated. I will display the ASCII invoice.\n"
+                    "Final Answer: Here is your travel receipt confirmation (Total $546.00, including a mock 5% service fee):\n\n"
+                    "╔══════════════════════════════════════════════════════════════╗\n"
+                    "║              ✈  XÁC NHẬN ĐẶT VÉ MÁY BAY                    ║\n"
+                    "╚══════════════════════════════════════════════════════════════╝\n\n"
+                    "  Mã đặt vé  : BK-A2B9C8E7\n"
+                    "  Ngày xuất  : 2026-06-01 21:30:10\n"
+                    "  Hành khách : Nguyen Van A\n"
+                    "  Hãng bay   : British Airways (BA 191)\n"
+                    "  Hành trình : CDG -> AUS\n"
+                    "  Tổng cộng  : 546.00 USD (Service Fee 5% included)\n\n"
+                    "══════════════════════════════════════════════════════════════"
+                )
+
+        # Scenario 5: Combined Booking Flow (Multi-Tool!)
+        else:
+            if self.step_count == 1:
+                content = (
+                    "Thought: The user wants a complete booking pipeline (Compare flights -> Select best -> Validate passenger info -> Create hold -> Generate invoice & PDF receipt). First, I will compare flights from CDG to AUS.\n"
+                    "Action: compare_flights(departure_airport=\"CDG\", arrival_airport=\"AUS\", departure_date=\"2026-03-03\", sort_by=\"recommended\")"
+                )
+            elif self.step_count == 2:
+                content = (
+                    "Thought: The best recommended option is British Airways flight ($520). Next, I will validate the passenger's details.\n"
+                    "Action: collect_personal_info(passenger_name=\"Nguyen Van A\", passenger_email=\"vana@email.com\", passenger_phone=\"0901234567\")"
+                )
+            elif self.step_count == 3:
+                content = (
+                    "Thought: Passenger details are validated. Now, I will put a 15-minute hold on the recommended flight.\n"
+                    "Action: hold_flight(booking_token=\"sample_token_1\", passenger_count=1, hold_minutes=15, expected_price=520.0)"
+                )
+            elif self.step_count == 4:
+                content = (
+                    "Thought: The hold is created under HOLD-E5A2B9C1. Now I will generate the beautiful ASCII invoice receipt.\n"
+                    "Action: generate_invoice(passenger_name=\"Nguyen Van A\", passenger_email=\"vana@email.com\", passenger_phone=\"0901234567\", flight_id=\"flight-854624\", airline=\"British Airways\", departure_airport=\"CDG\", arrival_airport=\"AUS\", departure_time=\"2026-03-03 12:10\", arrival_time=\"2026-03-03 16:50\", duration=\"13h 40m\", price_per_person=520.0, passengers=1, currency=\"USD\", booking_link=\"https://www.google.com/travel/flights?booking_token=sample_token_1\", stops=1)"
+                )
+            elif self.step_count == 5:
+                content = (
+                    "Thought: Invoice BK-2F9A1B8C generated successfully. Lastly, I will write the physical PDF receipt file to disk.\n"
+                    "Action: generate_invoice_pdf(invoice_result={\"status\": \"success\", \"booking_ref\": \"BK-2F9A1B8C\", \"receipt_text\": \"...\", \"invoice_data\": {\"booking_ref\": \"BK-2F9A1B8C\", \"passenger\": {\"name\": \"Nguyen Van A\", \"email\": \"vana@email.com\", \"phone\": \"0901234567\"}, \"flight\": {\"flight_id\": \"flight-854624\", \"airline\": \"British Airways\", \"departure_airport\": \"CDG\", \"arrival_airport\": \"AUS\", \"departure_time\": \"2026-03-03 12:10\", \"arrival_time\": \"2026-03-03 16:50\", \"duration\": \"13h 40m\", \"stops\": 1}, \"pricing\": {\"price_per_person\": 520.0, \"passengers\": 1, \"subtotal\": 520.0, \"service_fee\": 26.0, \"total_price\": 546.0, \"currency\": \"USD\"}}})"
+                )
+            else:
+                content = (
+                    "Thought: The PDF file has been written to disk. The entire multi-tool process is completed successfully. I will output the final answer.\n"
+                    "Final Answer: I have successfully completed the entire travel booking process:\n\n"
+                    "1. **Flight Compared**: Recommending British Airways CDG -> AUS ($520.00).\n"
+                    "2. **Passenger Validated**: Nguyen Van A (vana@email.com | 0901234567).\n"
+                    "3. **Safe Hold Placed**: Placed a 15-minute temporary hold (Hold Code: **HOLD-E5A2B9C1**).\n"
+                    "4. **Receipt Invoice**: Reference: **BK-2F9A1B8C** (Total: $546.00 USD, includes 5% service fee).\n"
+                    "5. **Physical PDF Confirmation**: Written successfully to disk at: `invoice_BK-2F9A1B8C.pdf`.\n\n"
+                    "Here is your travel invoice:\n\n"
+                    "╔══════════════════════════════════════════════════════════════╗\n"
+                    "║              ✈  XÁC NHẬN ĐẶT VÉ MÁY BAY                    ║\n"
+                    "╚══════════════════════════════════════════════════════════════╝\n\n"
+                    "  Mã đặt vé  : BK-2F9A1B8C\n"
+                    "  Ngày xuất  : 2026-06-01\n"
+                    "  Hành khách : Nguyen Van A\n"
+                    "  Hành trình : CDG → AUS\n"
+                    "  Hạng vé    : Phổ thông (Economy)\n"
+                    "  Tổng cộng  : 546.00 USD (Includes 5% Service Fee)\n\n"
+                    "══════════════════════════════════════════════════════════════"
                 )
                 
         return {
@@ -143,7 +239,7 @@ class DemoMockLLMProvider(LLMProvider):
 # ----------------- STREAMLIT INTERFACE -----------------
 
 if "query" not in st.session_state:
-    st.session_state["query"] = "Find the top productivity-friendly flight options from CDG to AUS."
+    st.session_state["query"] = "Compare flights from CDG to AUS on 2026-03-03 sorted by recommended score."
 if "eval_runs" not in st.session_state:
     st.session_state["eval_runs"] = []
 
@@ -173,7 +269,7 @@ mode = st.sidebar.radio(
     help="Live Mode runs the LLM fallback chain. Mock Mode runs a local, fast simulation without consuming keys."
 )
 
-max_steps_slider = st.sidebar.slider("Maximum ReAct Steps", 1, 15, 8)
+max_steps_slider = st.sidebar.slider("Maximum ReAct Steps", 1, 15, 10)
 
 # 🧠 Model Customization
 st.sidebar.markdown('<h3>🧠 Model Customization</h3>', unsafe_allow_html=True)
@@ -244,35 +340,41 @@ st.sidebar.markdown(f"**Local Model**: {local_status}")
 # 🛠️ Agent Skills
 st.sidebar.markdown('<h3>🛠️ Agent Skills</h3>', unsafe_allow_html=True)
 st.sidebar.markdown("""
-* 💻 **Comfort Finder**: Wi-Fi, power, and legroom scoring
-* ⏳ **Departure Countdown**: Duration remaining scheduling
-* 💼 **Segment Parser**: Price, carbon footprint, legroom audits
-* 🕒 **Clock Sync**: Real-time reference timing calculations
+* 📊 **Flight comparison**: Ranks flights by price, rating, stops, duration, or recommendation score.
+* 👤 **Passenger Validation**: Enforces structured Pydantic checks on traveler emails, phones, and profiles.
+* ⏳ **Simulated Holds**: Sets safe flight holds for passenger convenience.
+* 🧾 **Invoice Billing**: Automatically creates professional ASCII receipts and outputs physical PDF invoices.
 """)
 
 # 🤖 Agent System Prompt
 st.sidebar.markdown('<h3>🤖 Agent System Prompt</h3>', unsafe_allow_html=True)
-default_prompt = """You are an intelligent travel assistant. You must answer the user request by calling the appropriate tools.
-You have access to the following tools:
-- find_productivity_flights: Scores and ranks flight routes from the database based on comforts.
-- time_until_flight: Calculates the duration remaining until a specific flight departs. Usage: time_until_flight(flight_number, current_time_str)
-- parse_flight_details: Parses segment-by-segment itinerary, layover details, carbon footprint, and pricing. Usage: parse_flight_details(flight_number)
-- get_current_time: Returns the current local date and time of the system.
+default_prompt = """You are a Flight Search, Compare, and Hold ReAct Agent.
+Your job is to help users search, compare flights, collect & validate passenger information, manage temporary holds, and generate receipts (text invoices and physical PDFs).
 
-Use the following exact format:
-Thought: your line of reasoning about what you need to do next.
-Action: tool_name(arguments)
-Observation: the result returned by the tool.
+Available tools:
+- search_flights: Search flight options from local mock database. Usage: search_flights(departure_airport, arrival_airport, departure_date)
+- compare_flights: Compares multiple flights with a sortable ASCII table. Usage: compare_flights(departure_airport, arrival_airport, departure_date, sort_by)
+- find_productivity_flights: Scores and ranks flight routes from database based on comfort. Usage: find_productivity_flights()
+- time_until_flight: Calculates duration remaining until departure. Usage: time_until_flight(flight_number, current_time_str)
+- parse_flight_details: Parses segment itinerary details, price, layovers. Usage: parse_flight_details(flight_number)
+- get_current_time: Returns current local date/time of system in YYYY-MM-DD HH:MM format.
+- collect_personal_info: Collects & validates passenger details. Usage: collect_personal_info(passenger_name, passenger_email, passenger_phone)
+- collect_address_info: Collects & validates street address. Usage: collect_address_info(street, city)
+- collect_travel_preferences: Collects seating, meal, baggage preferences. Usage: collect_travel_preferences(preferred_class)
+- validate_all_user_info: Validates all personal, address, preferences at once. Usage: validate_all_user_info(user_data)
+- hold_flight: Temporarily hold flight using booking_token/flight_id. Usage: hold_flight(booking_token, passenger_count, hold_minutes)
+- get_hold: Looks up temporary hold by code. Usage: get_hold(hold_code)
+- generate_invoice: Creates beautiful ASCII flight receipt invoice. Usage: generate_invoice(passenger_name, flight_id, airline, departure_airport, arrival_airport, departure_time, arrival_time, duration, price_per_person)
+- generate_invoice_pdf: Generates a formal PDF invoice file on disk from invoice_result. Usage: generate_invoice_pdf(invoice_result, output_path)
 
-... (repeat Thought, Action, Observation as many times as needed to resolve the request)
+Use this exact format:
+Thought: brief reasoning about what to do next
+Action: tool_name(argument_name="value", another_argument="value")
+Observation: result returned by tool
 
-Thought: I have solved the request.
-Final Answer: your final response to the user.
-
-Ensure that:
-1. Every time you want to execute a tool, write "Action: tool_name(arguments)" followed by a newline and nothing else.
-2. Every time you write an "Action", you must STOP and wait for the "Observation:".
-3. Write "Final Answer:" when you are finished and have the final resolution."""
+When finished, use:
+Final Answer: your final response summarizing everything resolved.
+"""
 
 system_prompt_input = st.sidebar.text_area(
     "Custom Reasoning Prompt:",
@@ -281,44 +383,52 @@ system_prompt_input = st.sidebar.text_area(
     help="You can customize the ReAct agent's core instructions here!"
 )
 
-st.markdown('<div class="glass-card"><h3>📚 Traveler Use Cases</h3><p>Choose an interactive travel planning use case below. Clicking a button will automatically populate the query input field with a optimized pre-defined prompt.</p></div>', unsafe_allow_html=True)
+st.markdown('<div class="glass-card"><h3>📚 Traveler Use Cases</h3><p>Choose an interactive teammate travel use case below. Clicking a button will automatically populate the query runner with an optimized pre-defined prompt.</p></div>', unsafe_allow_html=True)
 
 # Tabs for Use Cases
-col1, col2, col3, col4 = st.columns(4)
+col1, col2, col3, col4, col5 = st.columns(5)
 
 with col1:
-    st.markdown("#### 💻 Productivity Finder")
-    st.caption("Nomad's Comfort Audit")
-    st.write("Searches the database, scores flight segments (Wi-Fi, power, legroom), and recommends high-comfort routes.")
-    if st.button("Load Nomad Prompt", key="nomad"):
-        st.session_state["query"] = "Find the top productivity-friendly flight options from CDG to AUS."
+    st.markdown("#### 📊 Flight Comparison")
+    st.caption("Nguyễn Khánh Toàn")
+    st.write("Searches routes and returns a sortable, weighted RCM scoring comparison table.")
+    if st.button("Compare Flights Prompt", key="compare_use"):
+        st.session_state["query"] = "Compare flights from CDG to AUS on 2026-03-03 sorted by recommended score."
         st.rerun()
 
 with col2:
-    st.markdown("#### ⏳ Departure countdown")
-    st.caption("Airport Lounge Sprints")
-    st.write("Calculates the precise duration remaining until departure relative to the system or reference clock.")
-    if st.button("Load Countdown Prompt", key="countdown"):
-        st.session_state["query"] = "How much time is left before flight 'BA 303' departs if the reference time is '2026-03-03 08:30'?"
+    st.markdown("#### 👤 Info Validation")
+    st.caption("Nguyễn Khánh Toàn")
+    st.write("Enforces declarative Pydantic v2 email, phone, and date constraints on passenger info.")
+    if st.button("Validate Info Prompt", key="validate_use"):
+        st.session_state["query"] = "Validate passenger personal info for Nguyen Van A (email: vana@email.com, phone: 0901234567, DOB: 1995-10-15)."
         st.rerun()
 
 with col3:
-    st.markdown("#### 💼 Segment Details Audit")
-    st.caption("Flight Route Deep-dive")
-    st.write("Extracts segment details, airport names, layover timings, airplane models, baggage, and change policies.")
-    if st.button("Load Itinerary Prompt", key="details"):
-        st.session_state["query"] = "Retrieve the complete segment-by-segment itinerary details for British Airways flight 'BA 191'."
+    st.markdown("#### ⏳ Simulated Hold")
+    st.caption("Phạm Thị Linh Chi")
+    st.write("Searches flight routes, selects the cheapest option, and creates a simulated hold reservation.")
+    if st.button("Simulate Hold Prompt", key="hold_use"):
+        st.session_state["query"] = "Search flights from CDG to AUS on 2026-03-03, choose the cheapest option, and place a 15-minute temporary hold on it."
         st.rerun()
 
 with col4:
-    st.markdown("#### 🚀 Combined Audit")
-    st.caption("Multi-Step Reasoning")
-    st.write("Performs all three tasks sequentially (Comfort Finder -> Route Details -> Timing Countdown) in a unified plan.")
-    if st.button("Load Combined Prompt", key="combined"):
+    st.markdown("#### 🧾 Invoice & PDF Receipt")
+    st.caption("Đinh Nhật Thành / Lưu Thiện Việt Cường")
+    st.write("Generates custom booking confirmations, calculates total price + fee, and exports formal PDF files.")
+    if st.button("Generate Invoice Prompt", key="invoice_use"):
+        st.session_state["query"] = "Generate a receipt invoice for Nguyen Van A (email: vana@email.com, phone: 0901234567) on British Airways flight CDG to AUS departing 2026-03-03 12:10 with duration 13h 40m at price 520.0."
+        st.rerun()
+
+with col5:
+    st.markdown("#### 🚀 Combined Flow")
+    st.caption("Multi-Tool Pipeline (All Teammates)")
+    st.write("Compares flights, validates passenger details, creates a safe hold, and outputs an invoice & PDF receipt.")
+    if st.button("Load Combined Flow", key="combined_use"):
         st.session_state["query"] = (
-            "Find the top productivity-friendly flight options from CDG to AUS. "
-            "Also, retrieve the complete itinerary details for flight 'BA 191', "
-            "and calculate how much time is left before flight 'BA 303' departs if the current reference time is '2026-03-03 08:30'."
+            "Compare flights from CDG to AUS on 2026-03-03. Find the best recommended one. "
+            "Then, collect passenger info for Nguyen Van A (email: vana@email.com, phone: 0901234567), "
+            "place a 15-minute hold on it, and generate an invoice with PDF confirmation."
         )
         st.rerun()
 
@@ -332,10 +442,20 @@ user_query = st.text_area(
 
 # Expose tools descriptions
 tools_metadata = [
-    {"name": "find_productivity_flights", "description": "Scores and ranks flight routes from the database based on comforts."},
-    {"name": "time_until_flight", "description": "Calculates the duration remaining until a specific flight departs. Usage: time_until_flight(flight_number, current_time_str)"},
-    {"name": "parse_flight_details", "description": "Parses segment-by-segment itinerary, layover details, carbon footprint, and pricing. Usage: parse_flight_details(flight_number)"},
-    {"name": "get_current_time", "description": "Returns the current local date and time of the system."}
+    {"name": "search_flights", "description": "Search flight options from local mock database. Usage: search_flights(departure_airport, arrival_airport, departure_date)"},
+    {"name": "compare_flights", "description": "Compares flights with a sortable ASCII table. Usage: compare_flights(departure_airport, arrival_airport, departure_date, sort_by)"},
+    {"name": "find_productivity_flights", "description": "Scores and ranks flight routes from database based on comfort. Usage: find_productivity_flights()"},
+    {"name": "time_until_flight", "description": "Calculates duration remaining until departure. Usage: time_until_flight(flight_number, current_time_str)"},
+    {"name": "parse_flight_details", "description": "Parses segment itinerary details. Usage: parse_flight_details(flight_number)"},
+    {"name": "get_current_time", "description": "Returns current local date/time of system in YYYY-MM-DD HH:MM format."},
+    {"name": "collect_personal_info", "description": "Collects & validates passenger details. Usage: collect_personal_info(passenger_name, passenger_email, passenger_phone)"},
+    {"name": "collect_address_info", "description": "Collects & validates street address. Usage: collect_address_info(street, city)"},
+    {"name": "collect_travel_preferences", "description": "Collects preferences. Usage: collect_travel_preferences(preferred_class)"},
+    {"name": "validate_all_user_info", "description": "Validates personal, address, preferences at once. Usage: validate_all_user_info(user_data)"},
+    {"name": "hold_flight", "description": "Temporarily hold flight using booking_token. Usage: hold_flight(booking_token, passenger_count, hold_minutes)"},
+    {"name": "get_hold", "description": "Looks up temporary hold by code. Usage: get_hold(hold_code)"},
+    {"name": "generate_invoice", "description": "Creates ASCII flight receipt invoice. Usage: generate_invoice(passenger_name, flight_id, airline, departure_airport, arrival_airport, departure_time, arrival_time, duration, price_per_person)"},
+    {"name": "generate_invoice_pdf", "description": "Generates a formal PDF invoice file on disk from invoice_result. Usage: generate_invoice_pdf(invoice_result, output_path)"}
 ]
 
 # Run agent

@@ -1,4 +1,12 @@
-from .flight_tools import FlightResult, FlightSearchParams, search_flights
+from .flight_tools import (
+    FlightResult,
+    FlightSearchParams,
+    search_flights,
+    find_productivity_flights,
+    time_until_flight,
+    parse_flight_details,
+    get_current_time,
+)
 from .hold_tools import get_hold, hold_flight
 from .user_info_tools import (
     PersonalInfo,
@@ -19,6 +27,10 @@ __all__ = [
     "FlightResult",
     "FlightSearchParams",
     "search_flights",
+    "find_productivity_flights",
+    "time_until_flight",
+    "parse_flight_details",
+    "get_current_time",
     "hold_flight",
     "get_hold",
     # User info tools
