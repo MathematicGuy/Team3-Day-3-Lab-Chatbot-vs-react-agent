@@ -280,8 +280,8 @@ openai_options = [m for m in supported_models if "gpt" in m] + ["Custom Model...
 gemini_options = [f"google/{m}" if not m.startswith("google/") else m for m in supported_models if "gemini" in m] + ["Custom Model..."]
 
 # Ensure default values are in the lists, or prepend/append them
-if "gpt-4o" not in openai_options:
-    openai_options.insert(0, "gpt-4o")
+if "gpt-5-nano-2025-08-07" not in openai_options:
+    openai_options.insert(0, "gpt-5-nano-2025-08-07")
 if "deepseek/deepseek-v4-flash" not in gemini_options:
     gemini_options.insert(0, "deepseek/deepseek-v4-flash")
 if "google/gemini-2.5-flash" not in gemini_options:
@@ -291,14 +291,14 @@ if "google/gemini-2.5-flash" not in gemini_options:
 openai_selection = st.sidebar.selectbox(
     "OpenAI Model",
     options=openai_options,
-    index=openai_options.index("gpt-4o") if "gpt-4o" in openai_options else 0,
+    index=openai_options.index("gpt-5-nano-2025-08-07") if "gpt-5-nano-2025-08-07" in openai_options else 0,
     help="Select a supported OpenAI model from metrics.py or choose Custom Model..."
 )
 
 if openai_selection == "Custom Model...":
     openai_model_input = st.sidebar.text_input(
         "Custom OpenAI Model Name",
-        value="gpt-4o",
+        value="gpt-5-nano-2025-08-07",
         help="Specify any valid OpenAI model name."
     )
 else:
@@ -333,7 +333,7 @@ openai_status = "🟢 Active" if os.getenv("OPENAI_API_KEY") else "🔴 Not Conf
 openrouter_status = "🟢 Active" if os.getenv("OPENAI_ROUTER") else "🔴 Not Configured"
 local_status = "🟢 Active" if os.path.exists("./models/Phi-3-mini-4k-instruct-q4.gguf") else "🟡 Skipped"
 
-st.sidebar.markdown(f"**OpenAI (GPT-4o)**: {openai_status}")
+st.sidebar.markdown(f"**OpenAI (gpt-5-nano-2025-08-07)**: {openai_status}")
 st.sidebar.markdown(f"**OpenRouter (Gemini)**: {openrouter_status}")
 st.sidebar.markdown(f"**Local Model**: {local_status}")
 
