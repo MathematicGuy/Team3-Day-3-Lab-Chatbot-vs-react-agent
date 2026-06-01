@@ -420,7 +420,23 @@ with col4:
     st.markdown("#### 🧾 Invoice & PDF Receipt")
     st.caption("Đinh Nhật Thành / Lưu Thiện Việt Cường")
     st.write("Generates custom booking confirmations, calculates total price + fee, and exports formal PDF files.")
-    if st.button("Generate Invoice Prompt", key="inv# Chat History Container
+    if st.button("Generate Invoice Prompt", key="invoice_use"):
+        st.session_state["pending_query"] = "Generate a receipt invoice for Nguyen Van A (email: vana@email.com, phone: 0901234567) on British Airways flight CDG to AUS departing 2026-03-03 12:10 with duration 13h 40m at price 520.0."
+        st.rerun()
+
+with col5:
+    st.markdown("#### 🚀 Combined Flow")
+    st.caption("Multi-Tool Pipeline (All Teammates)")
+    st.write("Compares flights, validates passenger details, creates a safe hold, and outputs an invoice & PDF receipt.")
+    if st.button("Load Combined Flow", key="combined_use"):
+        st.session_state["pending_query"] = (
+            "Compare flights from CDG to AUS on 2026-03-03. Find the best recommended one. "
+            "Then, collect passenger info for Nguyen Van A (email: vana@email.com, phone: 0901234567), "
+            "place a 15-minute hold on it, and generate an invoice with PDF confirmation."
+        )
+        st.rerun()
+
+# Chat History Container
 st.markdown("### 💬 Flight Agent Assistant Chat")
 for message in st.session_state["messages"]:
     with st.chat_message(message["role"]):
