@@ -280,6 +280,81 @@
             color: var(--color-tool);
         }
 
+        .section-header-flex {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 8px;
+        }
+
+        .toggle-container {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            background-color: var(--color-input-bg);
+            padding: 4px 10px;
+            border-radius: 20px;
+            border: 1.2px solid var(--border-color);
+        }
+
+        .toggle-text {
+            font-size: 11px;
+            font-weight: 600;
+            color: var(--text-secondary);
+            transition: var(--transition-all);
+            user-select: none;
+        }
+
+        .toggle-text.active {
+            color: var(--color-entry);
+            font-weight: 700;
+        }
+
+        .switch {
+            position: relative;
+            display: inline-block;
+            width: 32px;
+            height: 18px;
+        }
+
+        .switch input {
+            opacity: 0;
+            width: 0;
+            height: 0;
+        }
+
+        .slider {
+            position: absolute;
+            cursor: pointer;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background-color: #CBD5E1;
+            transition: .3s;
+            border-radius: 34px;
+        }
+
+        .slider:before {
+            position: absolute;
+            content: "";
+            height: 12px;
+            width: 12px;
+            left: 3px;
+            bottom: 3px;
+            background-color: white;
+            transition: .3s;
+            border-radius: 50%;
+        }
+
+        input:checked + .slider {
+            background-color: var(--color-entry);
+        }
+
+        input:checked + .slider:before {
+            transform: translateX(14px);
+        }
+
         /* --- 2. Middle Section: Dynamic Tool Cards --- */
         .tools-grid {
             display: grid;
@@ -614,8 +689,20 @@
 
         <!-- SECTION 1: GENERIC loop -->
         <section class="section-panel">
-            <span class="section-tag">✈️ Flight Assistant Engine</span>
-            <h2>Abstract ReAct Agent Loop</h2>
+            <div class="section-header-flex">
+                <div>
+                    <span class="section-tag">✈️ Flight Assistant Engine</span>
+                    <h2>Abstract ReAct Agent Loop</h2>
+                </div>
+                <div class="toggle-container">
+                    <span class="toggle-text active" id="label-simple">Simple</span>
+                    <label class="switch">
+                        <input type="checkbox" id="mode-toggle" onchange="toggleMode()">
+                        <span class="slider round"></span>
+                    </label>
+                    <span class="toggle-text" id="label-detail">Detailed</span>
+                </div>
+            </div>
             <p>The system loops continuously, generating travel thoughts and dynamically executing flight tools before outputting the passenger's final booking confirmation.</p>
             
             <div class="react-loop-container">
@@ -624,19 +711,22 @@
                     <div class="loop-card card-input">
                         <span class="card-label">Input</span>
                         <div class="card-title">Traveler Request</div>
-                        <div class="card-desc">User asks to find best flights (e.g., from CDG to AUS on 2026-03-03), validate passenger Nguyen Van A, hold seats, and print receipts.</div>
+                        <div class="card-desc desc-simple">Accepts the traveler's raw natural language request specifying their flight and booking goals.</div>
+                        <div class="card-desc desc-detail" style="display: none;">User asks to find best flights (e.g., from CDG to AUS on 2026-03-03), validate passenger Nguyen Van A, hold seats, and print receipts.</div>
                     </div>
                     <div class="arrow-connector">→</div>
                     <div class="loop-card card-entry">
                         <span class="card-label">Entry</span>
-                        <div class="card-title">Initialize Booking state</div>
-                        <div class="card-desc"><code>run(user_input)</code> boots context, initializes telemetry tags, and registers the traveler's active session profile.</div>
+                        <div class="card-title">Initialize Booking State</div>
+                        <div class="card-desc">Starts the agent session and creates a clean text history to track the conversation steps.</div>
+                        <div class="card-desc desc-detail" style="display: none;"><code>run(user_input)</code> boots context, initializes telemetry tags, and registers the traveler's active session profile.</div>
                     </div>
                     <div class="arrow-connector">→</div>
                     <div class="loop-card card-model">
                         <span class="card-label">Model</span>
                         <div class="card-title">Flight Planner Engine</div>
-                        <div class="card-desc">LLM reasons: <i>"I must search/compare flights first to extract a valid booking token before executing holds or invoices."</i></div>
+                        <div class="card-desc">Evaluates the traveler's request and plans which flight tools need to be called in order.</div>
+                        <div class="card-desc desc-detail" style="display: none;">LLM reasons: <i>"I must search/compare flights first to extract a valid booking token before executing holds or invoices."</i></div>
                     </div>
                 </div>
 
@@ -646,19 +736,22 @@
                         <div class="loop-card card-decision">
                             <span class="card-label">Decision</span>
                             <div class="card-title">Action Parser</div>
-                            <div class="card-desc">Checks if model output matches tool formats like <code>compare_flights(...)</code> or has reached the final confirmation.</div>
+                            <div class="card-desc">Inspects the model's plan to see if it decided to call a travel tool or give the final answer.</div>
+                            <div class="card-desc desc-detail" style="display: none;">Checks if model output matches tool formats like <code>compare_flights(...)</code> or has reached the final confirmation.</div>
                         </div>
                         <div class="arrow-connector">→</div>
                         <div class="loop-card card-resolve">
                             <span class="card-label">Resolve</span>
                             <div class="card-title">Dynamic Tool Resolver</div>
-                            <div class="card-desc">Matches action name (e.g., <code>compare_flights</code>) against the flight comparison, hold, and invoice modules.</div>
+                            <div class="card-desc">Finds and imports the matching travel tool function from the teammate's package by its name.</div>
+                            <div class="card-desc desc-detail" style="display: none;">Matches action name (e.g., <code>compare_flights</code>) against the flight comparison, hold, and invoice modules.</div>
                         </div>
                         <div class="arrow-connector">→</div>
                         <div class="loop-card card-execute">
                             <span class="card-label">Execute</span>
                             <div class="card-title">Execute Flight Tool</div>
-                            <div class="card-desc">Runs target function with auto-coerced types (converting string counts to ints, prices to floats, and statuses to bools).</div>
+                            <div class="card-desc">Invokes the target travel tool using validated passenger and segment parameters.</div>
+                            <div class="card-desc desc-detail" style="display: none;">Runs target function with auto-coerced types (converting string counts to ints, prices to floats, and statuses to bools).</div>
                         </div>
                     </div>
                 </div>
@@ -668,19 +761,22 @@
                     <div class="loop-card card-observation">
                         <span class="card-label">Observation</span>
                         <div class="card-title">Travel Observation</div>
-                        <div class="card-desc">Captures the comparative matrix, profile validation success, hold reference codes, or drafted invoice dictionary.</div>
+                        <div class="card-desc">Receives and reviews the search results, profile check status, or seat hold codes from the tool.</div>
+                        <div class="card-desc desc-detail" style="display: none;">Captures the comparative matrix, profile validation success, hold reference codes, or drafted invoice dictionary.</div>
                     </div>
                     <div class="arrow-connector">→</div>
                     <div class="loop-card card-model">
                         <span class="card-label">Continue</span>
                         <div class="card-title">Chain Travel Actions</div>
-                        <div class="card-desc">LLM inspects observation: <i>"Flight hold created with HOLD-E5A2B9C1. Next, I must call generate_invoice to draft the ticket invoice."</i></div>
+                        <div class="card-desc">Decides whether more tools (like billing or PDF generation) are needed before finishing.</div>
+                        <div class="card-desc desc-detail" style="display: none;">LLM inspects observation: <i>"Flight hold created with HOLD-E5A2B9C1. Next, I must call generate_invoice to draft the ticket invoice."</i></div>
                     </div>
                     <div class="arrow-connector">→</div>
                     <div class="loop-card card-output">
                         <span class="card-label">Output</span>
                         <div class="card-title">Booking Confirmation</div>
-                        <div class="card-desc">Exits loop. Delivers the hold code, booking reference BK-2F9A1B8C, and path to the newly saved Helvetica PDF invoice on disk.</div>
+                        <div class="card-desc">Stops the planning cycle and presents the final seat hold, prices, and physical PDF invoice path.</div>
+                        <div class="card-desc desc-detail" style="display: none;">Exits loop. Delivers the hold code, booking reference BK-2F9A1B8C, and path to the newly saved Helvetica PDF invoice on disk.</div>
                     </div>
                 </div>
             </div>
@@ -944,6 +1040,28 @@
                 const text = document.getElementById('usecase-text');
                 drawer.style.display = 'flex';
                 text.textContent = usecases[toolId];
+            }
+        }
+
+        function toggleMode() {
+            const isChecked = document.getElementById('mode-toggle').checked;
+            const simples = document.querySelectorAll('.desc-simple');
+            const details = document.querySelectorAll('.desc-detail');
+            const labelSimple = document.getElementById('label-simple');
+            const labelDetail = document.getElementById('label-detail');
+
+            if (isChecked) {
+                // Show Detailed mode
+                simples.forEach(el => el.style.display = 'none');
+                details.forEach(el => el.style.display = 'block');
+                labelSimple.classList.remove('active');
+                labelDetail.classList.add('active');
+            } else {
+                // Show Simple mode (default)
+                simples.forEach(el => el.style.display = 'block');
+                details.forEach(el => el.style.display = 'none');
+                labelSimple.classList.add('active');
+                labelDetail.classList.remove('active');
             }
         }
     </script>
