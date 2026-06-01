@@ -165,7 +165,7 @@
             background: radial-gradient(circle at 10% 20%, #F8FAFC 0%, #FFFFFF 100%);
             border-radius: var(--radius-md);
             padding: 24px;
-            border: 1px dashed var(--border-color);
+            border: 1.5px dashed #94A3B8; /* Darker & thicker Slate 400 dashed border */
         }
 
         /* Top Row of ReAct Loop */
@@ -180,7 +180,7 @@
         .loop-card {
             flex: 1;
             background-color: var(--bg-card);
-            border: 1px solid var(--border-color);
+            border: 1.2px solid #CBD5E1; /* Darker Slate 300 for clearer borders */
             border-radius: var(--radius-md);
             padding: 20px;
             box-shadow: var(--shadow-sm);
@@ -255,10 +255,15 @@
         /* Nested Tool Call Path Panel */
         .tool-calling-path {
             background-color: #F8FAFC;
-            border: 1px dashed #CBD5E1;
+            border: 2px dashed var(--color-tool); /* Darker & thicker Slate/Purple 500 dashed border */
             border-radius: var(--radius-md);
             padding: 24px;
             position: relative;
+        }
+
+        .tool-calling-path .loop-card {
+            border: 1.5px solid var(--color-tool); /* Distinctive purple/tool border for execute/resolve cards */
+            box-shadow: 0 4px 6px -1px rgba(139, 92, 246, 0.08);
         }
 
         .tool-calling-path::before {
@@ -609,29 +614,29 @@
 
         <!-- SECTION 1: GENERIC loop -->
         <section class="section-panel">
-            <span class="section-tag">💡 Architecture</span>
+            <span class="section-tag">✈️ Flight Assistant Engine</span>
             <h2>Abstract ReAct Agent Loop</h2>
-            <p>The system loops continuously, generating thoughts and executing dynamic tool bindings before serving the final structured output.</p>
+            <p>The system loops continuously, generating travel thoughts and dynamically executing flight tools before outputting the passenger's final booking confirmation.</p>
             
             <div class="react-loop-container">
                 <!-- Row 1: Core Flow -->
                 <div class="loop-row">
                     <div class="loop-card card-input">
                         <span class="card-label">Input</span>
-                        <div class="card-title">User Request</div>
-                        <div class="card-desc">Travel criteria, hold request, details validation, or checkout commands.</div>
+                        <div class="card-title">Traveler Request</div>
+                        <div class="card-desc">User asks to find best flights (e.g., from CDG to AUS on 2026-03-03), validate passenger Nguyen Van A, hold seats, and print receipts.</div>
                     </div>
                     <div class="arrow-connector">→</div>
                     <div class="loop-card card-entry">
                         <span class="card-label">Entry</span>
-                        <div class="card-title">run(user_input)</div>
-                        <div class="card-desc">Initializes dialogue context, structured telemetry, and starts the cycle.</div>
+                        <div class="card-title">Initialize Booking state</div>
+                        <div class="card-desc"><code>run(user_input)</code> boots context, initializes telemetry tags, and registers the traveler's active session profile.</div>
                     </div>
                     <div class="arrow-connector">→</div>
                     <div class="loop-card card-model">
                         <span class="card-label">Model</span>
-                        <div class="card-title">LLM.generate()</div>
-                        <div class="card-desc">Provider Fallback Chain: transparently calls primary OpenAI or OpenRouter fallback.</div>
+                        <div class="card-title">Flight Planner Engine</div>
+                        <div class="card-desc">LLM reasons: <i>"I must search/compare flights first to extract a valid booking token before executing holds or invoices."</i></div>
                     </div>
                 </div>
 
@@ -640,20 +645,20 @@
                     <div class="loop-row">
                         <div class="loop-card card-decision">
                             <span class="card-label">Decision</span>
-                            <div class="card-title">Parse Output</div>
-                            <div class="card-desc">Regex inspects output for ReAct brackets. Matches Tool Names vs. Final Answers.</div>
+                            <div class="card-title">Action Parser</div>
+                            <div class="card-desc">Checks if model output matches tool formats like <code>compare_flights(...)</code> or has reached the final confirmation.</div>
                         </div>
                         <div class="arrow-connector">→</div>
                         <div class="loop-card card-resolve">
                             <span class="card-label">Resolve</span>
-                            <div class="card-title">Find Matching Tool</div>
-                            <div class="card-desc">Resolves names from injected lists or dynamically imports flight tools.</div>
+                            <div class="card-title">Dynamic Tool Resolver</div>
+                            <div class="card-desc">Matches action name (e.g., <code>compare_flights</code>) against the flight comparison, hold, and invoice modules.</div>
                         </div>
                         <div class="arrow-connector">→</div>
                         <div class="loop-card card-execute">
                             <span class="card-label">Execute</span>
-                            <div class="card-title">Call Tool Function</div>
-                            <div class="card-desc">Parses signatures, coerces datatypes (ints/floats/bools), runs code.</div>
+                            <div class="card-title">Execute Flight Tool</div>
+                            <div class="card-desc">Runs target function with auto-coerced types (converting string counts to ints, prices to floats, and statuses to bools).</div>
                         </div>
                     </div>
                 </div>
@@ -662,20 +667,20 @@
                 <div class="loop-row">
                     <div class="loop-card card-observation">
                         <span class="card-label">Observation</span>
-                        <div class="card-title">Append Result</div>
-                        <div class="card-desc">Appends observations back into the prompt context for subsequent steps.</div>
+                        <div class="card-title">Travel Observation</div>
+                        <div class="card-desc">Captures the comparative matrix, profile validation success, hold reference codes, or drafted invoice dictionary.</div>
                     </div>
                     <div class="arrow-connector">→</div>
                     <div class="loop-card card-model">
                         <span class="card-label">Continue</span>
-                        <div class="card-title">Next Model Decision</div>
-                        <div class="card-desc">The model determines if more tools are needed or proceeds to conclude.</div>
+                        <div class="card-title">Chain Travel Actions</div>
+                        <div class="card-desc">LLM inspects observation: <i>"Flight hold created with HOLD-E5A2B9C1. Next, I must call generate_invoice to draft the ticket invoice."</i></div>
                     </div>
                     <div class="arrow-connector">→</div>
                     <div class="loop-card card-output">
                         <span class="card-label">Output</span>
-                        <div class="card-title">Final Answer</div>
-                        <div class="card-desc">Halts loop immediately; extracts and renders final answer to traveler.</div>
+                        <div class="card-title">Booking Confirmation</div>
+                        <div class="card-desc">Exits loop. Delivers the hold code, booking reference BK-2F9A1B8C, and path to the newly saved Helvetica PDF invoice on disk.</div>
                     </div>
                 </div>
             </div>
