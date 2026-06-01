@@ -68,7 +68,7 @@ class FallbackLLMProvider(LLMProvider):
 
 def get_fallback_provider(
     openai_model: str = "gpt-4o",
-    gemini_model: str = "gemini-1.5-flash",
+    gemini_model: str = "deepseek/deepseek-v4-flash",
     local_model_path: Optional[str] = None
 ) -> LLMProvider:
     """

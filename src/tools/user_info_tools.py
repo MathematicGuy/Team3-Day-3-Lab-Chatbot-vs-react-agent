@@ -28,7 +28,7 @@ class PersonalInfo(BaseModel):
     passenger_phone: Optional[str] = Field(None, description="Số điện thoại")
     date_of_birth: Optional[str] = Field(None, description="Ngày sinh (YYYY-MM-DD)")
 
-    @field_validator("email", mode="before")
+    @field_validator("passenger_email", mode="before")
     @classmethod
     def _validate_email(cls, v):
         if v is None or v == "":
@@ -39,7 +39,7 @@ class PersonalInfo(BaseModel):
             raise ValueError(f"Email không hợp lệ: {v}")
         return v
 
-    @field_validator("phone", mode="before")
+    @field_validator("passenger_phone", mode="before")
     @classmethod
     def _validate_phone(cls, v):
         if v is None or v == "":

@@ -351,6 +351,16 @@ if st.button("🚀 Run Agentic ReAct Loop", type="primary"):
                 except Exception as e:
                     st.error(f"Failed to initialize live provider: {e}. Falling back to Mock mode automatically.")
                     llm = DemoMockLLMProvider()
+
+            # Show active provider chain pills
+            if hasattr(llm, 'providers') and llm.providers:
+                provider_names = [p.__class__.__name__.replace('Provider', '') for p in llm.providers]
+                model_names = [getattr(p, 'model_name', '?') for p in llm.providers]
+                pills_html = " → ".join(
+                    f'<span style="background:#6366F1;color:white;padding:3px 10px;border-radius:12px;font-size:0.8em;font-weight:600">{name}: {model}</span>'
+                    for name, model in zip(provider_names, model_names)
+                )
+                st.markdown(f'<p style="margin:4px 0">🔗 <b>Active Fallback Chain:</b> {pills_html}</p>', unsafe_allow_html=True)
         else:
             llm = DemoMockLLMProvider()
 
@@ -394,8 +404,29 @@ if st.button("🚀 Run Agentic ReAct Loop", type="primary"):
                 if not line.strip():
                     continue
                 
-                # Check formatting
-                if line.startswith("Thought:"):
+                # ── Fallback chain events → highlighted banners ──
+                if "[FallbackChain] Attempting" in line:
+                    # Extract provider name e.g. OpenAIProvider, GeminiProvider
+                    provider_part = line.split("provider:")[-1].strip() if "provider:" in line else line
+                    st.markdown(
+                        f'<div style="background:#1e3a5f;border-left:4px solid #38BDF8;padding:10px 14px;'
+                        f'margin:6px 0;border-radius:6px;font-family:monospace">'
+                        f'🔄 <b style="color:#38BDF8">SWITCHING MODEL →</b> '
+                        f'<span style="color:#E2E8F0">{provider_part}</span></div>',
+                        unsafe_allow_html=True
+                    )
+                elif "[FallbackChain]" in line and "failed" in line.lower():
+                    # Extract failed provider
+                    failed_part = line.split("Provider")[-1].split("failed")[0].strip() if "Provider" in line else line
+                    st.markdown(
+                        f'<div style="background:#3b1a1a;border-left:4px solid #F87171;padding:10px 14px;'
+                        f'margin:6px 0;border-radius:6px;font-family:monospace">'
+                        f'⚠️ <b style="color:#F87171">FALLBACK TRIGGERED</b> — '
+                        f'<span style="color:#FCA5A5">{failed_part}</span> failed, trying next provider...</div>',
+                        unsafe_allow_html=True
+                    )
+                # ── Standard ReAct blocks ──
+                elif line.startswith("Thought:"):
                     st.markdown(f'<div class="thought-block">🧠 <b>{line}</b></div>', unsafe_allow_html=True)
                 elif line.startswith("Action:"):
                     st.markdown(f'<div class="action-block">⚙️ <b>{line}</b></div>', unsafe_allow_html=True)
