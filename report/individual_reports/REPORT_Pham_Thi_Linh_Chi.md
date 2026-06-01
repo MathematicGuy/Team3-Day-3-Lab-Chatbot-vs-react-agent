@@ -5,114 +5,329 @@
 - **Date**: 2026-06-01
 
 ---
+# I. Technical Contribution (15 Points)
 
-## I. Technical Contribution (15 Points)
+My contributions to this project focused on improving the reasoning behavior of the ReAct Agent, implementing a new flight hold tool, and proposing improvements for system robustness.
 
-My main contribution was implementing and improving the ReAct agent for the **Flight Search and Hold Agent** topic. The goal of this agent is to search flight options and create a temporary hold only when the user clearly asks for it. A hold is treated as a safe simulation, not a real paid booking.
+## 1. System Prompt Enhancement in agent.py
 
-- **Modules Implemented**
-  - `src/agent/agent.py`
-  - `src/tools/flight_tools.py`
-  - `src/tools/hold_tools.py`
+One of my main contributions was modifying the `get_system_prompt()` method in `src/agent/agent.py`.
 
-- **Code Highlights**
-  - Completed the ReAct loop in `ReActAgent.run()`, including LLM response generation, action parsing, tool execution, observation appending, and final answer detection.
-  - Added support for function-call style actions such as:
+The ReAct Agent depends heavily on the quality of its system prompt because the prompt defines how the model reasons, when tools should be called, and how outputs should be formatted. To improve consistency, I revised the prompt structure and added more explicit instructions.
 
-```text
-Action: search_flights(departure_airport="CDG", arrival_airport="AUS", departure_date="2026-03-03", currency="USD")
-```
+### Improvements Made
 
-  - Added a safer tool execution layer that resolves tools from `self.tools` and from tool modules such as `flight_tools` and `hold_tools`.
-  - Implemented `search_flights`, which returns structured flight options from local mock data.
-  - Implemented `hold_flight`, which creates a temporary hold code and expiry time without processing payment.
-  - Added telemetry events for `AGENT_START`, `LLM_RESPONSE`, `TOOL_EXECUTE`, `PARSER_ERROR`, `UNKNOWN_TOOL`, `TOOL_ERROR`, and `AGENT_END`.
+#### Clear Agent Role Definition
 
-- **Documentation**
-  - The ReAct loop uses the format `Thought -> Action -> Observation -> Final Answer`.
-  - `search_flights` provides real evidence for flight options, including price, route, duration, and booking token.
-  - `hold_flight` depends on the `booking_token` returned by `search_flights`, which prevents the agent from holding a flight that was never found.
+I specified that the agent is a **Flight Search and Hold ReAct Agent** whose responsibilities are limited to:
 
----
+* Searching for flights.
+* Comparing available options.
+* Creating temporary flight holds when explicitly requested by the user.
 
-## II. Debugging Case Study (10 Points)
+I also added restrictions to prevent the agent from claiming that a reservation is a confirmed booking or requesting sensitive information such as payment details or passport information.
 
-- **Problem Description**
+#### Tool Usage Rules
 
-During testing, the agent attempted to call `hold_flight` before running `search_flights`. This is a natural failure in a flight hold system because a temporary hold requires a valid `booking_token` or `flight_id` from a previous search result.
+I added a set of operational rules, including:
 
-- **Log Source**
+* Only registered tools may be used.
+* Flight data, booking tokens, and hold codes must never be fabricated.
+* `search_flights` must be executed before `hold_flight`.
+* The agent should not create a hold when the user only requests flight information.
+* Missing travel information should trigger a clarification question.
 
-From `logs/2026-06-01.log`:
+These rules help align the model's reasoning process with the actual workflow implemented in the system.
 
-```json
-{
-  "event": "TOOL_EXECUTE",
-  "data": {
-    "tool": "hold_flight",
-    "args": "passenger_count=\"1\", hold_minutes=\"15\"",
-    "observation": "{\"status\": \"failed\", \"error_code\": \"missing_booking_reference\", \"message\": \"A booking_token or flight_id from search_flights is required before creating a hold.\"}"
-  }
-}
-```
+#### Standardized ReAct Format
 
-- **Diagnosis**
-
-The failure was not caused by the API or the hold tool itself. The tool behaved correctly by rejecting a hold request without a booking reference. The root cause was that the agent tried to take an action without first grounding the decision in a flight search observation.
-
-This shows why ReAct agents need strong tool sequencing rules. For this domain, `hold_flight` must never be called before `search_flights`, because the booking token is created by the search step.
-
-- **Solution**
-
-I updated the system prompt and tool design so the agent follows this rule:
+I explicitly required the model to follow the format:
 
 ```text
-Always call search_flights before hold_flight.
+Thought:
+Action:
+Observation:
+Final Answer:
 ```
 
-I also added validation inside `hold_flight`. If no `booking_token` or `flight_id` is provided, the tool returns a structured failure:
+This structure improves compatibility with the parser implemented inside the agent and makes the reasoning process easier to follow.
 
-```json
-{
-  "status": "failed",
-  "error_code": "missing_booking_reference"
-}
-```
+#### Few-Shot Example
 
-This makes the failure observable in telemetry and allows the agent to recover by explaining the issue or asking for missing flight search information.
+I added a complete example showing how the agent should:
+
+1. Search for flights.
+2. Analyze the returned results.
+3. Select the most appropriate option.
+4. Create a temporary hold.
+5. Generate the final response.
+
+This example serves as guidance for the model when handling similar tasks.
 
 ---
 
-## III. Personal Insights: Chatbot vs ReAct (10 Points)
+## 2. Development of hold_tools.py
 
-1. **Reasoning**
+I implemented the file:
 
-The `Thought` step helped the agent break the user request into smaller actions. A normal chatbot may directly answer with guessed flight information, but the ReAct agent first identifies what information is missing, calls the correct tool, and then uses the observation to decide the next step.
+```python
+src/tools/hold_tools.py
+```
 
-2. **Reliability**
+The purpose of this module is to simulate a temporary flight reservation process in a safe laboratory environment.
 
-The agent can perform worse than a chatbot for simple questions because it may take extra steps and increase latency. For example, if the user only asks a general travel question, a chatbot can answer immediately, while an agent might overuse tools. The agent also depends on parser quality and tool availability, so malformed actions or unavailable tools can cause failures.
+### hold_flight()
 
-3. **Observation**
+The `hold_flight()` function creates a temporary hold record and performs input validation before creating the reservation.
 
-Observation is the most important difference between a chatbot and an agent. The chatbot relies mostly on model knowledge, while the ReAct agent receives external feedback from tools. In this lab, the observation from `search_flights` gave the agent actual flight options and booking tokens. The observation from `hold_flight` confirmed whether a temporary hold succeeded or failed.
+Implemented features include:
+
+* UUID-based hold code generation.
+* Passenger count validation.
+* Hold duration validation.
+* Verification that a booking reference exists.
+* Automatic expiration time calculation.
+* Temporary in-memory storage using `_HOLD_STORE`.
+
+The function returns structured responses describing either a successful hold or a validation failure.
+
+### get_hold()
+
+The `get_hold()` function retrieves previously created hold records.
+
+Its responsibilities include:
+
+* Looking up hold information using a hold code.
+* Returning hold details when available.
+* Returning an error response when the hold does not exist.
+
+### Error Handling
+
+The implementation includes several validation checks such as:
+
+* Invalid passenger count.
+* Invalid hold duration.
+* Missing booking reference.
+* Invalid hold requests.
+* Hold record not found.
+
+These validations improve the reliability of the simulated booking workflow.
 
 ---
 
-## IV. Future Improvements (5 Points)
+## 3. Error Handling Design Proposals
 
-- **Scalability**
+Beyond the implemented validations, I also explored additional error scenarios that could occur in a production environment.
 
-Use asynchronous tool execution and caching for flight search results. This would reduce latency and avoid repeated calls for the same route and date.
+Examples include:
 
-- **Safety**
+* Expired booking tokens.
+* Flight no longer available.
+* Duplicate hold requests.
+* Price changes between search and hold operations.
+* System timeouts.
 
-Add a `check_hold_policy` tool before `hold_flight`. This would verify whether a fare supports temporary hold and prevent invalid actions. The agent should also continue to avoid payment processing and sensitive passenger document collection.
+Although these scenarios were not fully implemented during the lab, documenting them helped identify potential weaknesses in the workflow and possible future improvements.
 
-- **Performance**
+---
 
-Add better ranking logic for flight options, such as cheapest, fastest, fewest layovers, lowest carbon emission, or best comfort score. This would help the agent select better flights instead of simply choosing the first or cheapest result.
+## 4. Flowchart Design
 
-- **Production Readiness**
+I created a flowchart illustrating the ReAct reasoning cycle used by the system.
 
-In a production system, I would connect the search tool to a real flight API, store hold records in a database, add retry logic for expired tokens, and monitor natural flight system errors such as `price_changed`, `sold_out`, `booking_token_expired`, and API timeouts.
+The diagram describes how information moves through the agent:
+
+```text
+User Request
+      ↓
+   Thought
+      ↓
+    Action
+      ↓
+ Tool Execution
+      ↓
+ Observation
+      ↓
+ Next Thought
+      ↓
+ Final Answer
+```
+
+The flowchart was useful for understanding the interaction between reasoning and tool execution and helped communicate the system architecture during team discussions.
+
+---
+
+# II. Debugging Case Study (10 Points)
+
+## Problem Description
+
+During development, one challenge was ensuring that the language model generated actions in a format that could be interpreted correctly by the system.
+
+For example, the model could produce:
+
+```text
+Action: search_flights
+```
+
+instead of providing the arguments required by the tool.
+
+Because the ReAct Agent depends on tool execution, incorrectly formatted actions can interrupt the reasoning process.
+
+---
+
+## Diagnosis
+
+After reviewing the agent architecture, I concluded that the issue was primarily related to prompt design rather than tool implementation.
+
+The model must generate outputs that satisfy two different requirements:
+
+1. Natural language reasoning.
+2. Machine-readable tool calls.
+
+Without clear instructions, the model may prioritize natural language generation and omit details required by the parser.
+
+I also observed that some tools require multiple parameters, making correct argument generation especially important.
+
+---
+
+## Solution
+
+To address this issue, I focused on improving the system prompt.
+
+The modifications included:
+
+* Defining a strict output format.
+* Adding explicit examples of valid tool calls.
+* Providing a complete ReAct workflow example.
+* Clarifying when each tool should be used.
+
+Rather than changing the parser logic, I improved the instructions given to the model so that generated actions would be closer to the expected format.
+
+This experience demonstrated that prompt engineering plays a significant role in the overall reliability of an agent-based system.
+
+---
+
+# III. Personal Insights: Chatbot vs ReAct Agent (10 Points)
+
+## 1. Reasoning Capability
+
+The most significant difference between a traditional chatbot and a ReAct Agent is the ability to perform structured reasoning.
+
+A chatbot generally follows a simple process:
+
+```text
+Input → Response
+```
+
+The ReAct Agent follows a multi-step workflow:
+
+```text
+Input
+→ Thought
+→ Action
+→ Observation
+→ Thought
+→ Final Answer
+```
+
+This allows the agent to gather information from external tools before generating a response.
+
+In the flight assistant project, the agent can retrieve flight data and make decisions based on actual search results rather than relying only on the model's internal knowledge.
+
+---
+
+## 2. Reliability
+
+The ReAct Agent is more capable when solving multi-step tasks, but it is also more dependent on external components.
+
+Its performance depends on:
+
+* Prompt quality.
+* Tool availability.
+* Tool correctness.
+* Model output formatting.
+
+A chatbot is simpler because it does not require external tool execution. However, it cannot reliably solve tasks that require real-time or structured data.
+
+This project showed that increased capability often comes with increased system complexity.
+
+---
+
+## 3. Importance of Observations
+
+The Observation stage is one of the most important aspects of the ReAct framework.
+
+Observations provide feedback from the environment and become the basis for the next reasoning step.
+
+Instead of making assumptions, the agent can adapt its behavior according to the information returned by the tools.
+
+This feedback loop makes ReAct Agents more grounded and task-oriented than traditional chatbots.
+
+---
+
+# IV. Future Improvements (5 Points)
+
+## Scalability
+
+A natural next step would be integrating Retrieval-Augmented Generation (RAG).
+
+Potential knowledge sources include:
+
+* Airline policies.
+* Airport information.
+* Customer support documentation.
+* Travel regulations.
+
+This would allow the system to answer both operational and informational questions.
+
+---
+
+## Multi-Agent Architecture
+
+The system could also be extended into a multi-agent architecture.
+
+Possible specialized agents include:
+
+### Planner Agent
+
+Responsible for understanding user goals and creating execution plans.
+
+### Flight Agent
+
+Responsible for flight search and itinerary analysis.
+
+### Booking Agent
+
+Responsible for reservation-related actions.
+
+### Supervisor Agent
+
+Responsible for validating outputs and monitoring agent behavior.
+
+This separation of responsibilities would improve maintainability and scalability.
+
+---
+
+## Safety and Performance
+
+Future improvements may also include:
+
+* Tool permission validation.
+* Prompt injection protection.
+* Confirmation mechanisms before critical actions.
+* Result caching.
+* Automated testing for tools and prompts.
+
+These additions would make the system more suitable for real-world deployment.
+
+---
+
+## Personal Contribution Summary
+
+My primary contributions to this project were:
+
+* Enhancing the system prompt in `agent.py`.
+* Implementing `hold_tools.py`.
+* Designing and documenting additional error-handling scenarios.
+* Creating a flowchart describing the ReAct workflow.
+* Analyzing prompt-related issues affecting tool invocation and agent behavior.
