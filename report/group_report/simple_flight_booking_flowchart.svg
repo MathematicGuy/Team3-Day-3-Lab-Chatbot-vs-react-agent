@@ -1,0 +1,98 @@
+<svg width="1200" height="820" viewBox="0 0 1200 820" xmlns="http://www.w3.org/2000/svg" role="img" aria-labelledby="title desc">
+  <title id="title">Simple Flight Search and Hold ReAct Agent Flowchart</title>
+  <desc id="desc">A simple visual logic diagram for a flight search and hold ReAct agent using only search_flights and hold_flight tools.</desc>
+  <defs>
+    <style>
+      .bg { fill: #f6f8fb; }
+      .title { font: 700 32px Arial, sans-serif; fill: #172033; }
+      .subtitle { font: 400 17px Arial, sans-serif; fill: #536070; }
+      .box { fill: #ffffff; stroke: #c9d2df; stroke-width: 2; rx: 8; }
+      .agent { fill: #eaf3ff; stroke: #4d8fdd; }
+      .tool { fill: #eaf8ef; stroke: #45a365; }
+      .decision { fill: #fff6df; stroke: #c79b2c; }
+      .insight { fill: #f0ecff; stroke: #7a65d8; }
+      .label { font: 700 18px Arial, sans-serif; fill: #172033; }
+      .small { font: 400 15px Arial, sans-serif; fill: #3d4858; }
+      .tiny { font: 400 13px Arial, sans-serif; fill: #566273; }
+      .arrow { stroke: #465365; stroke-width: 2.4; fill: none; marker-end: url(#arrow); }
+      .loop { stroke: #7a65d8; stroke-width: 2.5; fill: none; marker-end: url(#arrowPurple); stroke-dasharray: 7 6; }
+    </style>
+    <marker id="arrow" markerWidth="12" markerHeight="12" refX="10" refY="6" orient="auto">
+      <path d="M2,2 L10,6 L2,10 Z" fill="#465365"/>
+    </marker>
+    <marker id="arrowPurple" markerWidth="12" markerHeight="12" refX="10" refY="6" orient="auto">
+      <path d="M2,2 L10,6 L2,10 Z" fill="#7a65d8"/>
+    </marker>
+  </defs>
+
+  <rect class="bg" x="0" y="0" width="1200" height="820"/>
+
+  <text class="title" x="60" y="58">Simple Flight Search and Hold ReAct Agent</text>
+  <text class="subtitle" x="60" y="88">Visual logic diagram using only two tools: search_flights and hold_flight</text>
+
+  <rect class="box" x="70" y="140" width="240" height="92"/>
+  <text class="label" x="105" y="174">1. User Request</text>
+  <text class="small" x="105" y="200">The user asks for a flight</text>
+  <text class="small" x="105" y="220">with route, date, and trip needs.</text>
+
+  <rect class="box agent" x="390" y="140" width="250" height="92"/>
+  <text class="label" x="430" y="174">2. Agent Reasoning</text>
+  <text class="small" x="430" y="200">Thought: identify what</text>
+  <text class="small" x="430" y="220">information is needed next.</text>
+
+  <rect class="box tool" x="720" y="140" width="270" height="92"/>
+  <text class="label" x="758" y="174">3. Tool: search_flights</text>
+  <text class="small" x="758" y="200">Find matching flights by</text>
+  <text class="small" x="758" y="220">origin, destination, and date.</text>
+
+  <rect class="box agent" x="720" y="300" width="270" height="92"/>
+  <text class="label" x="765" y="334">4. Observation</text>
+  <text class="small" x="765" y="360">The tool returns available</text>
+  <text class="small" x="765" y="380">flights, prices, and seats.</text>
+
+  <rect class="box decision" x="390" y="300" width="250" height="92"/>
+  <text class="label" x="430" y="334">5. Decision Point</text>
+  <text class="small" x="430" y="360">Is there a suitable flight?</text>
+  <text class="small" x="430" y="380">If yes, proceed to booking.</text>
+
+  <rect class="box tool" x="70" y="300" width="240" height="92"/>
+  <text class="label" x="103" y="334">6. Tool: hold_flight</text>
+  <text class="small" x="103" y="360">Temporarily hold the selected</text>
+  <text class="small" x="103" y="380">flight without payment.</text>
+
+  <rect class="box agent" x="70" y="470" width="240" height="92"/>
+  <text class="label" x="105" y="504">7. Hold Result</text>
+  <text class="small" x="105" y="530">The hold tool returns a hold</text>
+  <text class="small" x="105" y="550">code, expiry time, or error.</text>
+
+  <rect class="box" x="390" y="470" width="250" height="92"/>
+  <text class="label" x="430" y="504">8. Final Answer</text>
+  <text class="small" x="430" y="530">The agent summarizes the</text>
+  <text class="small" x="430" y="550">flight and temporary hold.</text>
+
+  <rect class="box insight" x="720" y="470" width="360" height="218"/>
+  <text class="label" x="760" y="506">Group Learning Points</text>
+  <text class="small" x="760" y="540">1. A chatbot may guess flight details,</text>
+  <text class="small" x="760" y="564">but the agent uses tools for evidence.</text>
+  <text class="small" x="760" y="598">2. Observation keeps the next step</text>
+  <text class="small" x="760" y="622">grounded in real tool output.</text>
+  <text class="small" x="760" y="656">3. Holding a flight is safer than</text>
+  <text class="small" x="760" y="680">booking because no payment is made.</text>
+
+  <rect class="box insight" x="70" y="650" width="570" height="98"/>
+  <text class="label" x="105" y="686">Diagram Explanation</text>
+  <text class="small" x="105" y="716">The ReAct agent first searches for flights, reads the observation,</text>
+  <text class="small" x="105" y="738">then holds a suitable option temporarily. This reduces hallucination and risk.</text>
+
+  <path class="arrow" d="M310 186 H390"/>
+  <path class="arrow" d="M640 186 H720"/>
+  <path class="arrow" d="M855 232 V300"/>
+  <path class="arrow" d="M720 346 H640"/>
+  <path class="arrow" d="M390 346 H310"/>
+  <path class="arrow" d="M190 392 V470"/>
+  <path class="arrow" d="M310 516 H390"/>
+  <path class="loop" d="M515 300 C515 260 575 260 660 260 H855 C910 260 910 232 855 232"/>
+
+  <text class="tiny" x="552" y="284">If more flight options are needed, search again</text>
+  <text class="tiny" x="408" y="418">No suitable flight: ask user to change date or route</text>
+</svg>

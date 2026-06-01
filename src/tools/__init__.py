@@ -1,4 +1,5 @@
 from .flight_tools import FlightResult, FlightSearchParams, search_flights
+from .hold_tools import get_hold, hold_flight
 from .user_info_tools import (
     PersonalInfo,
     AddressInfo,
@@ -18,6 +19,8 @@ __all__ = [
     "FlightResult",
     "FlightSearchParams",
     "search_flights",
+    "hold_flight",
+    "get_hold",
     # User info tools
     "PersonalInfo",
     "AddressInfo",
