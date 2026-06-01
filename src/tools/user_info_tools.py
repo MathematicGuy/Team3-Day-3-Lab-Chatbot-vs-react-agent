@@ -28,7 +28,7 @@ class PersonalInfo(BaseModel):
     passenger_phone: Optional[str] = Field(None, description="Số điện thoại")
     date_of_birth: Optional[str] = Field(None, description="Ngày sinh (YYYY-MM-DD)")
 
-    @field_validator("passenger_email", mode="before")
+    @field_validator("passenger_email", mode="before", check_fields=False)
     @classmethod
     def _validate_email(cls, v):
         if v is None or v == "":
@@ -39,7 +39,7 @@ class PersonalInfo(BaseModel):
             raise ValueError(f"Email không hợp lệ: {v}")
         return v
 
-    @field_validator("passenger_phone", mode="before")
+    @field_validator("passenger_phone", mode="before", check_fields=False)
     @classmethod
     def _validate_phone(cls, v):
         if v is None or v == "":
@@ -50,7 +50,7 @@ class PersonalInfo(BaseModel):
             raise ValueError(f"Số điện thoại không hợp lệ: {v}")
         return v
 
-    @field_validator("date_of_birth", mode="before")
+    @field_validator("date_of_birth", mode="before", check_fields=False)
     @classmethod
     def _validate_dob(cls, v):
         if v is None or v == "":
@@ -71,7 +71,7 @@ class AddressInfo(BaseModel):
     postal_code: Optional[str] = Field(None, description="Mã bưu điện")
     country: str = Field(default="Vietnam", description="Quốc gia")
 
-    @field_validator("postal_code", mode="before")
+    @field_validator("postal_code", mode="before", check_fields=False)
     @classmethod
     def _validate_postal(cls, v):
         if v is None or v == "":
@@ -92,7 +92,7 @@ class TravelPreferences(BaseModel):
     max_budget: Optional[float] = Field(None, gt=0, description="Ngân sách tối đa")
     preferred_class: Optional[str] = Field(default="economy", description="Hạng vé ưa thích")
 
-    @field_validator("seat_preference", mode="before")
+    @field_validator("seat_preference", mode="before", check_fields=False)
     @classmethod
     def _validate_seat(cls, v):
         if v is None or v == "":

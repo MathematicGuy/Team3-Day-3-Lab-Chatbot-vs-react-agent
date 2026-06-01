@@ -1,5 +1,6 @@
 import json
 import os
+import re
 from datetime import datetime
 from pathlib import Path
 from typing import Any, Dict, List, Optional
@@ -235,3 +236,267 @@ def search_flights(
         },
         "flights": flights[:10],
     }
+
+
+def find_productivity_flights(local_data_path: Optional[str] = None) -> str:
+    """
+    Scores and ranks flight options from the database based on productivity-enabling comforts.
+    """
+    data = _load_data(local_data_path)
+    scored_options = []
+    
+    # Combine best_flights and other_flights
+    options = data.get("best_flights", []) + data.get("other_flights", [])
+    
+    for idx, opt in enumerate(options):
+        score = 0
+        has_free_wifi = False
+        has_paid_wifi = False
+        has_power = False
+        avg_legroom = 0
+        legroom_count = 0
+        
+        segments = opt.get("flights", [])
+        for segment in segments:
+            exts = [str(e).lower() for e in segment.get("extensions", [])]
+            
+            # Wi-Fi check
+            if any("free wi-fi" in e for e in exts):
+                has_free_wifi = True
+            elif any("wi-fi" in e for e in exts):
+                has_paid_wifi = True
+                
+            # Power check
+            if any("power" in e or "usb" in e or "outlet" in e for e in exts):
+                has_power = True
+                
+            # Legroom check
+            legroom_str = segment.get("legroom", "")
+            if legroom_str:
+                match = re.search(r"(\d+)", legroom_str)
+                if match:
+                    val = int(match.group(1))
+                    avg_legroom += val
+                    legroom_count += 1
+                    
+        # Apply score rules
+        if has_free_wifi:
+            score += 30
+        elif has_paid_wifi:
+            score += 15
+            
+        if has_power:
+            score += 30
+            
+        if legroom_count > 0:
+            avg_legroom = avg_legroom / legroom_count
+            if avg_legroom > 30:
+                score += 15
+            elif avg_legroom < 30:
+                score -= 15
+        else:
+            avg_legroom = 30 # default
+            
+        # Layover penalties
+        layovers = opt.get("layovers", [])
+        for layover in layovers:
+            duration = layover.get("duration", 0)
+            if duration > 180: # > 3 hours
+                score -= 15
+            if layover.get("overnight"):
+                score -= 30
+                
+        # Format for output
+        first_seg = segments[0] if segments else {}
+        last_seg = segments[-1] if segments else {}
+        flight_numbers = [s.get("flight_number", "N/A") for s in segments]
+        booking_token = opt.get("booking_token", "")
+        
+        scored_options.append({
+            "flight_id": f"flight-{abs(hash(booking_token or str(idx))) % 1_000_000}",
+            "airline": first_seg.get("airline", "Unknown"),
+            "flight_numbers": flight_numbers,
+            "departure": first_seg.get("departure_airport", {}).get("id"),
+            "arrival": last_seg.get("arrival_airport", {}).get("id"),
+            "departure_time": first_seg.get("departure_airport", {}).get("time"),
+            "arrival_time": last_seg.get("arrival_airport", {}).get("time"),
+            "duration": _minutes_to_hhmm(opt.get("total_duration")),
+            "stops": max(0, len(segments) - 1),
+            "stop_info": ", ".join(layover.get("id", "?") for layover in opt.get("layovers", [])) or None,
+            "price": opt.get("price"),
+            "comfort_score": score,
+            "booking_token": booking_token,
+            "booking_link": (
+                f"https://www.google.com/travel/flights?booking_token={booking_token}"
+                if booking_token
+                else "https://www.google.com/travel/flights"
+            ),
+            "details": {
+                "free_wifi": has_free_wifi,
+                "power_outlets": has_power,
+                "avg_legroom_inches": round(avg_legroom, 1),
+                "layovers_count": len(layovers),
+            }
+        })
+        
+    scored_options.sort(key=lambda x: (-x["comfort_score"], x["price"] if x["price"] is not None else 99999))
+    
+    return json.dumps({
+        "status": "success",
+        "count": len(scored_options),
+        "flights": scored_options
+    }, indent=2, ensure_ascii=False)
+
+
+def time_until_flight(
+    flight_number: str,
+    current_time_str: str,
+    local_data_path: Optional[str] = None
+) -> str:
+    """
+    Calculates the duration remaining until a specific flight departs.
+    """
+    data = _load_data(local_data_path)
+    options = data.get("best_flights", []) + data.get("other_flights", [])
+    
+    target_flight_number = str(flight_number).strip().upper()
+    found_segment = None
+    
+    for opt in options:
+        for segment in opt.get("flights", []):
+            if segment.get("flight_number", "").strip().upper() == target_flight_number:
+                found_segment = segment
+                break
+        if found_segment:
+            break
+            
+    if not found_segment:
+        return json.dumps({
+            "status": "error",
+            "message": f"Flight '{flight_number}' not found in the database."
+        })
+        
+    dep_time_str = found_segment.get("departure_airport", {}).get("time")
+    if not dep_time_str:
+        return json.dumps({
+            "status": "error",
+            "message": f"Departure time for flight '{flight_number}' is missing."
+        })
+        
+    try:
+        current_time = datetime.strptime(current_time_str.strip(), "%Y-%m-%d %H:%M")
+        departure_time = datetime.strptime(dep_time_str.strip(), "%Y-%m-%d %H:%M")
+    except Exception as exc:
+        try:
+            current_time = datetime.strptime(current_time_str.strip(), "%Y-%m-%d %H:%M:%S")
+            departure_time = datetime.strptime(dep_time_str.strip(), "%Y-%m-%d %H:%M:%S")
+        except Exception:
+            return json.dumps({
+                "status": "error",
+                "message": f"Time format mismatch. Ensure both are 'YYYY-MM-DD HH:MM'. Detail: {exc}"
+            })
+            
+    delta = departure_time - current_time
+    total_seconds = delta.total_seconds()
+    
+    if total_seconds < 0:
+        elapsed = abs(total_seconds)
+        hours, remainder = divmod(int(elapsed), 3600)
+        minutes, _ = divmod(remainder, 60)
+        return json.dumps({
+            "status": "elapsed",
+            "flight_number": flight_number,
+            "departure_time": dep_time_str,
+            "current_reference_time": current_time_str,
+            "time_since_departure": f"{hours}h {minutes}m",
+            "message": f"Flight {flight_number} already departed {hours} hours and {minutes} minutes ago."
+        })
+    else:
+        hours, remainder = divmod(int(total_seconds), 3600)
+        minutes, _ = divmod(remainder, 60)
+        return json.dumps({
+            "status": "pending",
+            "flight_number": flight_number,
+            "departure_time": dep_time_str,
+            "current_reference_time": current_time_str,
+            "time_remaining": f"{hours}h {minutes}m",
+            "message": f"Flight {flight_number} departs in {hours} hours and {minutes} minutes."
+        })
+
+
+def parse_flight_details(
+    flight_number: str,
+    local_data_path: Optional[str] = None
+) -> str:
+    """
+    Parses segment-by-segment itinerary, layover details, carbon footprint, and pricing for a flight.
+    """
+    data = _load_data(local_data_path)
+    options = data.get("best_flights", []) + data.get("other_flights", [])
+    
+    target_flight_number = str(flight_number).strip().upper()
+    found_option = None
+    
+    for opt in options:
+        for segment in opt.get("flights", []):
+            if segment.get("flight_number", "").strip().upper() == target_flight_number:
+                found_option = opt
+                break
+        if found_option:
+            break
+            
+    if not found_option:
+        return json.dumps({
+            "status": "error",
+            "message": f"Flight route containing '{flight_number}' not found."
+        })
+        
+    segments = found_option.get("flights", [])
+    parsed_segments = []
+    
+    for s in segments:
+        parsed_segments.append({
+            "flight_number": s.get("flight_number"),
+            "airline": s.get("airline"),
+            "airplane": s.get("airplane"),
+            "travel_class": s.get("travel_class"),
+            "legroom": s.get("legroom"),
+            "departure": {
+                "airport": s.get("departure_airport", {}).get("id"),
+                "airport_name": s.get("departure_airport", {}).get("name"),
+                "time": s.get("departure_airport", {}).get("time"),
+            },
+            "arrival": {
+                "airport": s.get("arrival_airport", {}).get("id"),
+                "airport_name": s.get("arrival_airport", {}).get("name"),
+                "time": s.get("arrival_airport", {}).get("time"),
+            },
+            "duration": _minutes_to_hhmm(s.get("duration")),
+            "extensions": s.get("extensions", [])
+        })
+        
+    layovers = []
+    for l in found_option.get("layovers", []):
+        layovers.append({
+            "airport": l.get("id"),
+            "airport_name": l.get("name"),
+            "duration": _minutes_to_hhmm(l.get("duration")),
+            "overnight": l.get("overnight", False)
+        })
+        
+    return json.dumps({
+        "status": "success",
+        "flight_number": flight_number,
+        "price": found_option.get("price"),
+        "total_duration": _minutes_to_hhmm(found_option.get("total_duration")),
+        "booking_token": found_option.get("booking_token"),
+        "segments": parsed_segments,
+        "layovers": layovers,
+        "carbon_emissions": found_option.get("carbon_emissions", {}),
+        "booking_link": f"https://www.google.com/travel/flights?booking_token={found_option.get('booking_token', '')}"
+    }, indent=2, ensure_ascii=False)
+
+
+def get_current_time() -> str:
+    """Returns the current local date and time of the system in 'YYYY-MM-DD HH:MM' format."""
+    return datetime.now().strftime("%Y-%m-%d %H:%M")

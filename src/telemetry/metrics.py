@@ -15,15 +15,16 @@ class PerformanceTracker:
     #   gemini-1.5-pro  : $0.00175 / 1K tokens
     #   gemini-2.0-flash: $0.0001 / 1K tokens (estimated)
     PRICING: Dict[str, float] = {
-        "gpt-4o":              0.005,
-        "gpt-4o-mini":         0.00015,
-        "gpt-3.5-turbo":       0.0005,
-        "gemini-1.5-flash":    0.000075,
-        "gemini-1.5-pro":      0.00175,
-        "gemini-2.0-flash":    0.0001,
-        "gemini-2.0-flash-exp":0.0001,
-        "gemini-2.5-flash":    0.000075,
+        "gpt-4o":               0.005,
+        "gpt-4o-mini":          0.00015,
+        "gpt-3.5-turbo":        0.0005,
+        "gemini-1.5-flash":     0.000075,
+        "gemini-1.5-pro":       0.00175,
+        "gemini-2.0-flash":     0.0001,
+        "gemini-2.0-flash-exp": 0.0001,
+        "gemini-2.5-flash":     0.000075,
         "gemini-3.1-flash-lite":0.000075,
+        "deepseek-v4-flash":    0.00014745,
     }
 
     def __init__(self):

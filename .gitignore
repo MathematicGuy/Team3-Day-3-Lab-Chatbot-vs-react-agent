@@ -5,3 +5,6 @@ __pycache__/
 .DS_Store
 models/
 venv
+model/
+.pytest_cache
+model

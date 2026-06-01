@@ -68,17 +68,17 @@ class InvoiceRequest(BaseModel):
     currency: str = Field(default="USD")
     booking_link: Optional[str] = Field(None, description="Link đặt vé")
 
-    @field_validator("departure_airport", "arrival_airport", mode="before")
+    @field_validator("departure_airport", "arrival_airport", mode="before", check_fields=False)
     @classmethod
     def _upper_airport(cls, v):
         return str(v).strip().upper()
 
-    @field_validator("travel_class", mode="before")
+    @field_validator("travel_class", mode="before", check_fields=False)
     @classmethod
     def _normalize_class(cls, v):
         return str(v).strip().lower()
 
-    @field_validator("currency", mode="before")
+    @field_validator("currency", mode="before", check_fields=False)
     @classmethod
     def _upper_currency(cls, v):
         return str(v).strip().upper()

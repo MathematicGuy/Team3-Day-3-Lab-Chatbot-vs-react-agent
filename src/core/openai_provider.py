@@ -5,7 +5,7 @@ from openai import OpenAI
 from src.core.llm_provider import LLMProvider
 
 class OpenAIProvider(LLMProvider):
-    def __init__(self, model_name: str = "gpt-4o", api_key: Optional[str] = None):
+    def __init__(self, model_name: str = "gpt-5-nano-2025-08-07", api_key: Optional[str] = None):
         if not api_key:
             api_key = os.getenv("OPENAI_API_KEY") or os.getenv("OPENAI_API_KEY")
         
@@ -100,7 +100,7 @@ if __name__ == "__main__":
         print("-" * 60)
         print("[*] Initializing OpenAIProvider...")
         try:
-            provider = OpenAIProvider(model_name="gpt-4o", api_key=env_key)
+            provider = OpenAIProvider(model_name="gpt-5-nano-2025-08-07", api_key=env_key)
             prompt = "Hello! Please give a 1-sentence greeting for a flight assistant traveler tool."
             print(f"[*] Prompt: '{prompt}'")
             print("[*] Generating response...")
