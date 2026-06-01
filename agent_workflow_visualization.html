@@ -711,21 +711,21 @@
                     <div class="loop-card card-input">
                         <span class="card-label">Input</span>
                         <div class="card-title">Traveler Request</div>
-                        <div class="card-desc desc-simple">Accepts the traveler's raw natural language request specifying their flight and booking goals.</div>
+                        <div class="card-desc desc-simple">You tell the assistant what flights you want to search, who is traveling, and if you want to place a hold.</div>
                         <div class="card-desc desc-detail" style="display: none;">User asks to find best flights (e.g., from CDG to AUS on 2026-03-03), validate passenger Nguyen Van A, hold seats, and print receipts.</div>
                     </div>
                     <div class="arrow-connector">→</div>
                     <div class="loop-card card-entry">
                         <span class="card-label">Entry</span>
                         <div class="card-title">Initialize Booking State</div>
-                        <div class="card-desc">Starts the agent session and creates a clean text history to track the conversation steps.</div>
+                        <div class="card-desc">The assistant starts your personal booking session and prepares to record all details of your trip.</div>
                         <div class="card-desc desc-detail" style="display: none;"><code>run(user_input)</code> boots context, initializes telemetry tags, and registers the traveler's active session profile.</div>
                     </div>
                     <div class="arrow-connector">→</div>
                     <div class="loop-card card-model">
                         <span class="card-label">Model</span>
                         <div class="card-title">Flight Planner Engine</div>
-                        <div class="card-desc">Evaluates the traveler's request and plans which flight tools need to be called in order.</div>
+                        <div class="card-desc">The assistant thinks about your request and plans the best order to find and book your flight.</div>
                         <div class="card-desc desc-detail" style="display: none;">LLM reasons: <i>"I must search/compare flights first to extract a valid booking token before executing holds or invoices."</i></div>
                     </div>
                 </div>
@@ -736,21 +736,21 @@
                         <div class="loop-card card-decision">
                             <span class="card-label">Decision</span>
                             <div class="card-title">Action Parser</div>
-                            <div class="card-desc">Inspects the model's plan to see if it decided to call a travel tool or give the final answer.</div>
+                            <div class="card-desc">The assistant decides whether to call a search or booking tool, or give you the final flight details.</div>
                             <div class="card-desc desc-detail" style="display: none;">Checks if model output matches tool formats like <code>compare_flights(...)</code> or has reached the final confirmation.</div>
                         </div>
                         <div class="arrow-connector">→</div>
                         <div class="loop-card card-resolve">
                             <span class="card-label">Resolve</span>
                             <div class="card-title">Dynamic Tool Resolver</div>
-                            <div class="card-desc">Finds and imports the matching travel tool function from the teammate's package by its name.</div>
+                            <div class="card-desc">The assistant selects the correct specialized travel tool (like comparison or hold) to process your request.</div>
                             <div class="card-desc desc-detail" style="display: none;">Matches action name (e.g., <code>compare_flights</code>) against the flight comparison, hold, and invoice modules.</div>
                         </div>
                         <div class="arrow-connector">→</div>
                         <div class="loop-card card-execute">
                             <span class="card-label">Execute</span>
                             <div class="card-title">Execute Flight Tool</div>
-                            <div class="card-desc">Invokes the target travel tool using validated passenger and segment parameters.</div>
+                            <div class="card-desc">The assistant runs the selected travel tool with your passenger and flight information.</div>
                             <div class="card-desc desc-detail" style="display: none;">Runs target function with auto-coerced types (converting string counts to ints, prices to floats, and statuses to bools).</div>
                         </div>
                     </div>
@@ -761,21 +761,21 @@
                     <div class="loop-card card-observation">
                         <span class="card-label">Observation</span>
                         <div class="card-title">Travel Observation</div>
-                        <div class="card-desc">Receives and reviews the search results, profile check status, or seat hold codes from the tool.</div>
+                        <div class="card-desc">The assistant gathers the results from the tool, like flight prices, profile validation checks, or seat hold codes.</div>
                         <div class="card-desc desc-detail" style="display: none;">Captures the comparative matrix, profile validation success, hold reference codes, or drafted invoice dictionary.</div>
                     </div>
                     <div class="arrow-connector">→</div>
                     <div class="loop-card card-model">
                         <span class="card-label">Continue</span>
                         <div class="card-title">Chain Travel Actions</div>
-                        <div class="card-desc">Decides whether more tools (like billing or PDF generation) are needed before finishing.</div>
+                        <div class="card-desc">The assistant decides if it needs to perform another step (like creating an invoice) before completing your request.</div>
                         <div class="card-desc desc-detail" style="display: none;">LLM inspects observation: <i>"Flight hold created with HOLD-E5A2B9C1. Next, I must call generate_invoice to draft the ticket invoice."</i></div>
                     </div>
                     <div class="arrow-connector">→</div>
                     <div class="loop-card card-output">
                         <span class="card-label">Output</span>
                         <div class="card-title">Booking Confirmation</div>
-                        <div class="card-desc">Stops the planning cycle and presents the final seat hold, prices, and physical PDF invoice path.</div>
+                        <div class="card-desc">You receive your final seat hold reference code, pricing breakdown, and a printable PDF receipt on disk.</div>
                         <div class="card-desc desc-detail" style="display: none;">Exits loop. Delivers the hold code, booking reference BK-2F9A1B8C, and path to the newly saved Helvetica PDF invoice on disk.</div>
                     </div>
                 </div>
